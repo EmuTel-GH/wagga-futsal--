@@ -20,15 +20,18 @@ type Team = {
 };
 
 type Competition = { id: string; name: string; season: string };
+type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
 
 export default function TeamsClient({
   initialTeams,
   allPlayers,
   allCompetitions,
+  allOfficials,
 }: {
   initialTeams: Team[];
   allPlayers: Player[];
   allCompetitions: Competition[];
+  allOfficials: Official[];
 }) {
   const [teams, setTeams] = useState<Team[]>(initialTeams);
 
@@ -52,6 +55,7 @@ export default function TeamsClient({
               team={t}
               allPlayers={allPlayers}
               allCompetitions={allCompetitions}
+              allOfficials={allOfficials}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
             />

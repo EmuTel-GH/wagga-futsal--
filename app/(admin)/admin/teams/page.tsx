@@ -4,7 +4,7 @@ import TeamsClient from "./TeamsClient";
 export const dynamic = "force-dynamic";
 
 export default async function TeamsPage() {
-  const [teams, allPlayers, allCompetitions] = await Promise.all([
+  const [teams, allPlayers, allCompetitions, allOfficials] = await Promise.all([
     prisma.team.findMany({
       include: {
         _count: { select: { players: true } },
@@ -15,6 +15,7 @@ export default async function TeamsPage() {
           include: { player: true },
           orderBy: { jerseyNumber: "asc" },
         },
+        officials: { orderBy: { lastName: "asc" } },
       },
       orderBy: { name: "asc" },
     }),
@@ -27,6 +28,10 @@ export default async function TeamsPage() {
       where: { status: { not: "COMPLETED" } },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.teamOfficial.findMany({
+      select: { id: true, firstName: true, lastName: true, role: true, teamId: true },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }),
   ]);
 
   return (
@@ -36,6 +41,7 @@ export default async function TeamsPage() {
         initialTeams={teams}
         allPlayers={allPlayers}
         allCompetitions={allCompetitions}
+        allOfficials={allOfficials}
       />
     </div>
   );

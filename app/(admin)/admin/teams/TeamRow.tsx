@@ -26,9 +26,11 @@ type Team = {
   _count: { players: number };
   competitions: CompetitionTeam[];
   players: TeamPlayer[];
+  officials?: Official[];
 };
 
 type Competition = { id: string; name: string; season: string };
+type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
 
 function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => void }) {
   const [editing, setEditing] = useState(false);
@@ -110,12 +112,14 @@ export default function TeamRow({
   team,
   allPlayers,
   allCompetitions,
+  allOfficials,
   onUpdated,
   onDeleted,
 }: {
   team: Team;
   allPlayers: Player[];
   allCompetitions: Competition[];
+  allOfficials: Official[];
   onUpdated: (t: Team) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -169,6 +173,30 @@ export default function TeamRow({
       players: team.players.filter((p) => p.playerId !== playerId),
       _count: { players: team._count.players - 1 },
     });
+  };
+
+  const [officialId, setOfficialId] = useState("");
+  const [officialSaving, setOfficialSaving] = useState(false);
+
+  const handleAddOfficial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!officialId) return;
+    setOfficialSaving(true);
+    const res = await fetch(`/api/admin/teams/${team.id}/officials`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ officialId }),
+    });
+    setOfficialSaving(false);
+    if (!res.ok) return;
+    const official = await res.json();
+    onUpdated({ ...team, officials: [...(team.officials ?? []), official] });
+    setOfficialId("");
+  };
+
+  const handleRemoveOfficial = async (id: string) => {
+    await fetch(`/api/admin/teams/${team.id}/officials?officialId=${id}`, { method: "DELETE" });
+    onUpdated({ ...team, officials: (team.officials ?? []).filter((o) => o.id !== id) });
   };
 
   const handleAddToComp = async (e: React.FormEvent) => {
@@ -300,6 +328,50 @@ export default function TeamRow({
                   {playerSaving ? "Adding…" : "Add Player"}
                 </button>
                 {playerError && <span className="text-xs text-red-600">{playerError}</span>}
+              </form>
+            )}
+          </div>
+
+          {/* Officials (coach / manager) */}
+          <div className="mt-4">
+            <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Coach / Manager</p>
+            {(team.officials ?? []).length === 0 ? (
+              <p className="text-xs text-amber-700 mb-2">
+                ⚠ No registered official yet — every team needs one (rule 1.3).
+              </p>
+            ) : (
+              <ul className="text-xs mb-2 space-y-1">
+                {(team.officials ?? []).map((o) => (
+                  <li key={o.id} className="flex items-center gap-2">
+                    <span>{o.firstName} {o.lastName}</span>
+                    <span className="text-[10px] font-bold bg-navy/10 text-navy px-1.5 py-0.5 rounded-full capitalize">
+                      {o.role.toLowerCase()}
+                    </span>
+                    <button onClick={() => handleRemoveOfficial(o.id)} className="text-red-500 hover:text-red-700">
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {allOfficials.some((o) => !o.teamId) && (
+              <form onSubmit={handleAddOfficial} className="flex gap-2 items-center flex-wrap">
+                <select
+                  value={officialId}
+                  onChange={(e) => setOfficialId(e.target.value)}
+                  className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
+                >
+                  <option value="">Select coach/manager…</option>
+                  {allOfficials.filter((o) => !o.teamId).map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.firstName} {o.lastName} ({o.role.toLowerCase()})
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={officialSaving || !officialId}
+                  className="bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
+                  {officialSaving ? "Adding…" : "Assign"}
+                </button>
               </form>
             )}
           </div>
