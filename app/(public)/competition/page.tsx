@@ -12,9 +12,10 @@ async function getData(compId?: string) {
 
   const activeComp = competitions.find((c) => c.id === compId) ?? competitions[0];
 
-  if (!activeComp) return { competitions, activeComp: null, fixtures: [], standings: [], topScorers: [] };
+  if (!activeComp)
+    return { competitions, activeComp: null, fixtures: [], standings: [], topScorers: [], teams: [] };
 
-  const [fixtures, standings, topScorers] = await Promise.all([
+  const [fixtures, standings, topScorers, teams] = await Promise.all([
     prisma.fixture.findMany({
       where: { competitionId: activeComp.id },
       include: { homeTeam: true, awayTeam: true, pitch: { include: { venue: true } } },
@@ -22,9 +23,14 @@ async function getData(compId?: string) {
     }),
     getStandings(activeComp.id),
     getTopScorers(activeComp.id),
+    prisma.competitionTeam.findMany({
+      where: { competitionId: activeComp.id },
+      include: { team: { select: { id: true, name: true } } },
+      orderBy: { team: { name: "asc" } },
+    }),
   ]);
 
-  return { competitions, activeComp, fixtures, standings, topScorers };
+  return { competitions, activeComp, fixtures, standings, topScorers, teams };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -42,7 +48,7 @@ export default async function CompetitionPage({
   searchParams: Promise<{ comp?: string }>;
 }) {
   const { comp } = await searchParams;
-  const { competitions, activeComp, fixtures, standings, topScorers } = await getData(comp);
+  const { competitions, activeComp, fixtures, standings, topScorers, teams } = await getData(comp);
 
   if (!activeComp) {
     return (
@@ -85,6 +91,30 @@ export default async function CompetitionPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Fixtures by round */}
         <div className="lg:col-span-2 space-y-6">
+          {fixtures.length === 0 && teams.length > 0 && (
+            <div>
+              <h2 className="text-sm font-bold text-muted uppercase mb-2">
+                Teams · {activeComp.season}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {teams.map((ct) => (
+                  <Link
+                    key={ct.team.id}
+                    href={`/teams/${ct.team.id}`}
+                    className="bg-white border border-border rounded-lg px-4 py-3 font-semibold text-navy text-sm hover:border-brand hover:text-brand transition-colors"
+                  >
+                    {ct.team.name}
+                  </Link>
+                ))}
+              </div>
+              <p className="text-muted text-sm mt-3">
+                The draw hasn&apos;t been released yet — fixtures will appear here once it is.
+              </p>
+            </div>
+          )}
+          {fixtures.length === 0 && teams.length === 0 && (
+            <p className="text-muted text-sm">Team nominations for this competition are still open.</p>
+          )}
           {Object.entries(rounds).map(([round, games]) => (
             <div key={round}>
               <h2 className="text-sm font-bold text-muted uppercase mb-2">Round {round}</h2>
@@ -178,6 +208,11 @@ export default async function CompetitionPage({
               {standings.length >= 4 && (
                 <p className="text-xs text-muted px-3 py-2 border-t border-border">
                   Top 4 qualify for finals
+                </p>
+              )}
+              {standings.length === 0 && (
+                <p className="text-xs text-muted px-3 py-3">
+                  The ladder appears once games are played.
                 </p>
               )}
             </div>
