@@ -51,9 +51,9 @@ export default function TeamNominationForm({ competitions }: { competitions: Com
         <p className="text-5xl mb-4">🎉</p>
         <h2 className="text-xl font-black text-navy mb-2">Team nominated!</h2>
         <p className="text-muted text-sm max-w-md mx-auto">
-          <span className="font-semibold text-navy">{form.teamName}</span> is in. We&apos;ll be in
-          touch at {form.contactEmail} — make sure every player completes their own PlayFootball
-          registration before kick-off.
+          <span className="font-semibold text-navy">{form.teamName}</span> has been submitted and is
+          awaiting approval by Wagga Futsal. We&apos;ll be in touch at {form.contactEmail} — make sure
+          every player completes their own PlayFootball registration before kick-off.
         </p>
       </div>
     );

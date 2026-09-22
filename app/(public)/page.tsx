@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { getStandings, getTopScorers } from "@/lib/standings";
+import TeamSearch from "@/components/public/TeamSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +105,9 @@ export default async function HomePage() {
               High speed, high energy, high skill — indoor futsal for all ages, from Under 8s to
               Opens. Summer 2026 registration is open now.
             </p>
+            <div className="mb-6 flex justify-center md:justify-start">
+              <TeamSearch placeholder="Find your team — search and pin it here…" />
+            </div>
             <div className="flex flex-wrap gap-4 justify-center md:justify-start">
               <Link
                 href="/register"

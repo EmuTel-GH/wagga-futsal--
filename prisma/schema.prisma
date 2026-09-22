@@ -204,6 +204,10 @@ model Team {
   kitShirt     String?
   kitShorts    String?
   kitSocks     String?
+  // Public form nominations arrive PENDING: an admin approves them (or merges
+  // them into an existing team). Pending teams are hidden from the public site
+  // and excluded from draw generation. Admin-created teams are APPROVED.
+  status       TeamStatus @default(APPROVED)
   createdAt    DateTime @default(now())
 
   players      TeamPlayer[]
@@ -213,6 +217,11 @@ model Team {
   homeFixtures Fixture[]   @relation("HomeTeam")
   awayFixtures Fixture[]   @relation("AwayTeam")
   events       MatchEvent[]
+}
+
+enum TeamStatus {
+  PENDING
+  APPROVED
 }
 
 // A name from the team registration form: the coach/manager's EXPECTED squad.

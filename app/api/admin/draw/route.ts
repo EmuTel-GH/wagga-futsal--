@@ -19,14 +19,18 @@ export async function POST(req: Request) {
   const competition = await prisma.competition.findUnique({
     where: { id: competitionId },
     include: {
-      teams: { include: { team: true } },
+      // Pending nominations don't play — approve or merge them first.
+      teams: { where: { team: { status: "APPROVED" } }, include: { team: true } },
       timeSlots: { include: { pitch: true } },
     },
   });
 
   if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
   if (competition.teams.length < 2) {
-    return NextResponse.json({ error: "Need at least 2 teams to generate a draw" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Need at least 2 approved teams to generate a draw (pending nominations are excluded)" },
+      { status: 400 }
+    );
   }
   if (competition.timeSlots.length === 0) {
     return NextResponse.json({ error: "No time slots configured for this competition" }, { status: 400 });

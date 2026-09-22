@@ -27,12 +27,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "That competition is not open for nominations" }, { status: 400 });
   }
 
-  const duplicate = await prisma.competitionTeam.findFirst({
-    where: { competitionId, team: { name: { equals: String(teamName).trim(), mode: "insensitive" } } },
+  // A pending nomination with the same name is a double-submit — block it.
+  // An APPROVED team with the same name is fine: the nomination arrives as
+  // PENDING and the admins merge it into the existing team.
+  const pendingDuplicate = await prisma.competitionTeam.findFirst({
+    where: {
+      competitionId,
+      team: { name: { equals: String(teamName).trim(), mode: "insensitive" }, status: "PENDING" },
+    },
   });
-  if (duplicate) {
+  if (pendingDuplicate) {
     return NextResponse.json(
-      { error: "A team with that name is already nominated in this competition — contact admin@waggafutsal.com.au if that's yours." },
+      { error: "That team has already been nominated and is awaiting approval — contact admin@waggafutsal.com.au if you need to change it." },
       { status: 409 }
     );
   }
@@ -51,6 +57,7 @@ export async function POST(req: Request) {
 
   const team = await prisma.team.create({
     data: {
+      status: "PENDING", // admin approves or merges into an existing team
       name: String(teamName).trim(),
       contactName: String(contactName).trim(),
       contactEmail: String(contactEmail).trim(),

@@ -17,6 +17,7 @@ type CompetitionTeam = { id: string; teamId: string; competition: CompetitionRef
 type Team = {
   id: string;
   name: string;
+  status?: string;
   contactName?: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
@@ -112,6 +113,7 @@ function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => 
 
 export default function TeamRow({
   team,
+  allTeams,
   allPlayers,
   allCompetitions,
   allOfficials,
@@ -119,6 +121,7 @@ export default function TeamRow({
   onDeleted,
 }: {
   team: Team;
+  allTeams: Team[];
   allPlayers: Player[];
   allCompetitions: Competition[];
   allOfficials: Official[];
@@ -180,6 +183,41 @@ export default function TeamRow({
 
   const [officialId, setOfficialId] = useState("");
   const [officialSaving, setOfficialSaving] = useState(false);
+  const [mergeTarget, setMergeTarget] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
+
+  const isPending = team.status === "PENDING";
+  const myCompIds = team.competitions.map((c) => c.competition.id);
+  const mergeCandidates = allTeams.filter(
+    (t) =>
+      t.id !== team.id &&
+      t.status !== "PENDING" &&
+      t.competitions.some((c) => myCompIds.includes(c.competition.id))
+  );
+
+  const handleApprove = async () => {
+    const res = await fetch(`/api/admin/teams/${team.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "APPROVED" }),
+    });
+    if (res.ok) onUpdated({ ...team, status: "APPROVED" });
+  };
+
+  const handleMerge = async () => {
+    if (!mergeTarget) return;
+    const target = allTeams.find((t) => t.id === mergeTarget);
+    if (!confirm(`Merge "${team.name}" into "${target?.name}"? Contact/kit details and players move across, then this nomination is removed.`)) return;
+    setMergeBusy(true);
+    const res = await fetch(`/api/admin/teams/${team.id}/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetTeamId: mergeTarget }),
+    });
+    setMergeBusy(false);
+    if (res.ok) window.location.reload();
+  };
+
   const [expectedOpen, setExpectedOpen] = useState(false);
   const [expectedText, setExpectedText] = useState("");
   const [expectedSaving, setExpectedSaving] = useState(false);
@@ -281,6 +319,11 @@ export default function TeamRow({
       >
         <div>
           <span className="font-semibold text-navy text-sm">{team.name}</span>
+          {isPending && (
+            <span className="ml-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+              Pending approval
+            </span>
+          )}
           <span className="ml-2 text-xs text-muted">{team._count.players} players</span>
           {team.competitions.length > 0 && (
             <span className="ml-2 text-xs text-muted">
@@ -298,6 +341,45 @@ export default function TeamRow({
 
       {expanded && (
         <div className="px-4 pb-4 bg-gray-50 border-t border-border">
+          {/* Pending nomination: approve or merge */}
+          {isPending && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs text-amber-800 font-semibold mb-2">
+                Public team nomination — approve it as a new team, or merge it into an existing one.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleApprove}
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold"
+                >
+                  Approve team
+                </button>
+                {mergeCandidates.length > 0 && (
+                  <>
+                    <span className="text-xs text-muted">or merge into</span>
+                    <select
+                      value={mergeTarget}
+                      onChange={(e) => setMergeTarget(e.target.value)}
+                      className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
+                    >
+                      <option value="">Select team…</option>
+                      {mergeCandidates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleMerge}
+                      disabled={mergeBusy || !mergeTarget}
+                      className="bg-navy text-white px-3 py-1.5 rounded text-xs font-bold disabled:opacity-60"
+                    >
+                      {mergeBusy ? "Merging…" : "Merge"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Contact + kit details */}
           <TeamDetails team={team} onUpdated={onUpdated} />
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import MyTeamsWidget from "@/components/public/MyTeamsWidget";
 
 const NAV_LINKS = [
   { href: "/register", label: "Register 2026" },
@@ -38,6 +39,8 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           </Link>
         </div>
       </header>
+
+      <MyTeamsWidget />
 
       <main className="flex-1">{children}</main>
 

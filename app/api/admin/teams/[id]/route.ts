@@ -19,6 +19,10 @@ export async function PATCH(req: Request, { params }: Params) {
   for (const key of allowed) {
     if (key in body) data[key] = body[key] || null;
   }
+  // Approve (or re-pend) a nominated team.
+  if ("status" in body && ["PENDING", "APPROVED"].includes(body.status)) {
+    data.status = body.status;
+  }
 
   const team = await prisma.team.update({
     where: { id },

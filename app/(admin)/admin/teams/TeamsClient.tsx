@@ -12,6 +12,7 @@ type CompetitionTeam = { id: string; teamId: string; competition: CompetitionRef
 type Team = {
   id: string;
   name: string;
+  status?: string;
   contactEmail: string | null;
   contactPhone: string | null;
   _count: { players: number };
@@ -53,6 +54,7 @@ export default function TeamsClient({
             <TeamRow
               key={t.id}
               team={t}
+              allTeams={teams}
               allPlayers={allPlayers}
               allCompetitions={allCompetitions}
               allOfficials={allOfficials}

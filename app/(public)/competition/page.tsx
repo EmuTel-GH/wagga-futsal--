@@ -24,7 +24,7 @@ async function getData(compId?: string) {
     getStandings(activeComp.id),
     getTopScorers(activeComp.id),
     prisma.competitionTeam.findMany({
-      where: { competitionId: activeComp.id },
+      where: { competitionId: activeComp.id, team: { status: "APPROVED" } },
       include: { team: { select: { id: true, name: true } } },
       orderBy: { team: { name: "asc" } },
     }),
