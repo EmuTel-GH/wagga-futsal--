@@ -47,7 +47,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <Image src="/logo.png" alt="Wagga Futsal" width={64} height={64} className="rounded mb-2" />
             <p className="text-sm">Wagga Wagga&apos;s premier indoor futsal competition since 2012.</p>
             <p className="text-sm mt-1">
-              Venues: EQUEX Multi Purpose Sports Centre &amp; Bolton Park Stadium
+              Venue: EQUEX Multi Purpose Sports Centre
             </p>
           </div>
           <div>
