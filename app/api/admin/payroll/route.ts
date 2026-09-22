@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { generateABA } from "@/lib/aba";
 
+// Two referee rate tiers: senior games (U16 & Opens — incl. U19/Social) and
+// junior games (everything else).
+const SENIOR_GROUPS = ["U16", "U19", "OPENS", "SOCIAL"];
+const isSenior = (ageGroup: string) => SENIOR_GROUPS.includes(ageGroup);
+
 export async function GET(req: Request) {
   try { await requireAdmin(); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,17 +34,24 @@ export async function GET(req: Request) {
         scheduledAt: { gte: fromDate, lte: toDate },
         OR: [{ fieldRefereeId: { not: null } }, { scorerId: { not: null } }],
       },
-      select: { fieldRefereeId: true, scorerId: true, scheduledAt: true },
+      select: { fieldRefereeId: true, scorerId: true, scheduledAt: true, competition: { select: { ageGroup: true } } },
     }),
   ]);
 
-  const fieldRefRate = rate?.fieldRefCents ?? 5000;
-  const scorerRate = rate?.scorerCents ?? 2500;
+  const rates = {
+    fieldJr: rate?.fieldRefCents ?? 5000,
+    scorerJr: rate?.scorerCents ?? 2500,
+    fieldSr: rate?.fieldRefSeniorCents ?? 5000,
+    scorerSr: rate?.scorerSeniorCents ?? 2500,
+  };
 
   const summary = referees.map((ref) => {
-    const fieldRefGames = fixtures.filter((f) => f.fieldRefereeId === ref.id).length;
-    const scorerGames = fixtures.filter((f) => f.scorerId === ref.id).length;
-    const totalCents = fieldRefGames * fieldRefRate + scorerGames * scorerRate;
+    const fieldSr = fixtures.filter((f) => f.fieldRefereeId === ref.id && isSenior(f.competition.ageGroup)).length;
+    const fieldJr = fixtures.filter((f) => f.fieldRefereeId === ref.id && !isSenior(f.competition.ageGroup)).length;
+    const scorerSr = fixtures.filter((f) => f.scorerId === ref.id && isSenior(f.competition.ageGroup)).length;
+    const scorerJr = fixtures.filter((f) => f.scorerId === ref.id && !isSenior(f.competition.ageGroup)).length;
+    const totalCents =
+      fieldSr * rates.fieldSr + fieldJr * rates.fieldJr + scorerSr * rates.scorerSr + scorerJr * rates.scorerJr;
     return {
       refereeId: ref.id,
       name: ref.user?.name ?? [ref.firstName, ref.lastName].filter(Boolean).join(" ") ?? "Unnamed referee",
@@ -47,8 +59,10 @@ export async function GET(req: Request) {
       bsb: ref.bsb,
       accountNumber: ref.accountNumber,
       accountName: ref.accountName,
-      fieldRefGames,
-      scorerGames,
+      fieldRefGames: fieldSr + fieldJr,
+      scorerGames: scorerSr + scorerJr,
+      seniorGames: fieldSr + scorerSr,
+      juniorGames: fieldJr + scorerJr,
       totalCents,
       hasBankDetails: !!(ref.bsb && ref.accountNumber && ref.accountName),
     };
@@ -83,19 +97,26 @@ export async function POST(req: Request) {
         scheduledAt: { gte: fromDate, lte: toDate },
         OR: [{ fieldRefereeId: { not: null } }, { scorerId: { not: null } }],
       },
-      select: { fieldRefereeId: true, scorerId: true },
+      select: { fieldRefereeId: true, scorerId: true, competition: { select: { ageGroup: true } } },
     }),
   ]);
 
-  const fieldRefRate = rate?.fieldRefCents ?? 5000;
-  const scorerRate = rate?.scorerCents ?? 2500;
+  const rates = {
+    fieldJr: rate?.fieldRefCents ?? 5000,
+    scorerJr: rate?.scorerCents ?? 2500,
+    fieldSr: rate?.fieldRefSeniorCents ?? 5000,
+    scorerSr: rate?.scorerSeniorCents ?? 2500,
+  };
 
   type Payee = { bsb: string; accountNumber: string; accountName: string; amountCents: number; reference: string };
   const payees: Payee[] = referees
     .flatMap((ref) => {
-      const fieldRefGames = fixtures.filter((f) => f.fieldRefereeId === ref.id).length;
-      const scorerGames = fixtures.filter((f) => f.scorerId === ref.id).length;
-      const amountCents = fieldRefGames * fieldRefRate + scorerGames * scorerRate;
+      const fieldSr = fixtures.filter((f) => f.fieldRefereeId === ref.id && isSenior(f.competition.ageGroup)).length;
+      const fieldJr = fixtures.filter((f) => f.fieldRefereeId === ref.id && !isSenior(f.competition.ageGroup)).length;
+      const scorerSr = fixtures.filter((f) => f.scorerId === ref.id && isSenior(f.competition.ageGroup)).length;
+      const scorerJr = fixtures.filter((f) => f.scorerId === ref.id && !isSenior(f.competition.ageGroup)).length;
+      const amountCents =
+        fieldSr * rates.fieldSr + fieldJr * rates.fieldJr + scorerSr * rates.scorerSr + scorerJr * rates.scorerJr;
       if (!amountCents || !ref.bsb || !ref.accountNumber || !ref.accountName) return [];
       return [{ bsb: ref.bsb, accountNumber: ref.accountNumber, accountName: ref.accountName, amountCents, reference: "WAGGA FUTSAL GAME FEE" }];
     });
@@ -140,12 +161,12 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { fieldRefCents, scorerCents } = await req.json();
+  const { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents } = await req.json();
 
   const rate = await prisma.payRate.upsert({
     where: { id: "default" },
-    create: { id: "default", fieldRefCents, scorerCents },
-    update: { fieldRefCents, scorerCents },
+    create: { id: "default", fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
+    update: { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
   });
 
   return NextResponse.json(rate);

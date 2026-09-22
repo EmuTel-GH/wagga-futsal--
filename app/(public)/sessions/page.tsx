@@ -10,7 +10,10 @@ export default async function SessionsPage() {
   const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const sessions = await prisma.futsalSession.findMany({
     where: { status: { in: ["OPEN", "FULL"] }, scheduledAt: { gte: cutoff } },
-    include: { _count: { select: { bookings: { where: { status: "CONFIRMED" } } } } },
+    include: {
+      pitch: { select: { name: true, venue: { select: { name: true } } } },
+      _count: { select: { bookings: { where: { status: "CONFIRMED" } } } },
+    },
     orderBy: { scheduledAt: "asc" },
   });
 
@@ -60,6 +63,12 @@ export default async function SessionsPage() {
                     {" · "}
                     {s.durationMins} mins
                   </p>
+                  {s.pitch && (
+                    <p>
+                      <span className="text-muted">Where: </span>
+                      {s.pitch.name}
+                    </p>
+                  )}
                   <p>
                     <span className="text-muted">Spots: </span>
                     {isFull ? (

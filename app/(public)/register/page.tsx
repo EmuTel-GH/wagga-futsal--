@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 export const metadata: Metadata = { title: "Register — Summer 2026" };
 
@@ -44,14 +45,22 @@ export default function RegisterPage() {
             High speed, high energy, high skill — the ultimate summer sport is here. Indoor futsal
             for all ages, from Under 8s to Opens.
           </p>
-          <a
-            href={REGISTER_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block bg-brand hover:bg-brand-dark text-white font-bold px-8 py-3.5 rounded-lg transition-colors text-lg"
-          >
-            Register Now
-          </a>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <a
+              href={REGISTER_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-brand hover:bg-brand-dark text-white font-bold px-8 py-3.5 rounded-lg transition-colors text-lg"
+            >
+              Register as a Player
+            </a>
+            <Link
+              href="/register/team"
+              className="inline-block border-2 border-brand text-brand hover:bg-brand hover:text-white font-bold px-8 py-3 rounded-lg transition-colors text-lg"
+            >
+              Nominate a Team
+            </Link>
+          </div>
           <p className="text-white/50 text-sm mt-3">
             Registration via{" "}
             <a
@@ -145,7 +154,13 @@ export default function RegisterPage() {
                   </a>{" "}
                   (search &ldquo;Wagga Futsal&rdquo;)
                 </li>
-                <li>Pick your division — teams and individual players welcome</li>
+                <li>
+                  Coaches/managers:{" "}
+                  <Link href="/register/team" className="text-brand font-semibold hover:underline">
+                    nominate your team online
+                  </Link>{" "}
+                  with your expected players
+                </li>
                 <li>We&apos;ll confirm your draw before kick-off in October</li>
               </ol>
               <a

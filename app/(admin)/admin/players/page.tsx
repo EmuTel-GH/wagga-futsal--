@@ -57,13 +57,18 @@ export default function PlayersAdmin() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-black text-navy">Players</h1>
         <label className={`cursor-pointer bg-brand hover:bg-brand-dark text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors ${importing ? "opacity-60" : ""}`}>
           {importing ? "Importing…" : "Import CSV"}
           <input type="file" accept=".csv" className="sr-only" onChange={handleImport} disabled={importing} />
         </label>
       </div>
+
+      <p className="text-xs text-muted mb-4">
+        Players come from the PlayFootball registration import — re-import any time to pick up new
+        registrations. Assign players to squads from the <a href="/admin/teams" className="text-brand font-semibold hover:underline">Teams</a> page.
+      </p>
 
       {importResult && (
         <div className="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-lg mb-4">

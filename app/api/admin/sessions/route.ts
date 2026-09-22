@@ -11,6 +11,7 @@ export async function GET() {
 
   const sessions = await prisma.futsalSession.findMany({
     include: {
+      pitch: { select: { id: true, name: true } },
       _count: { select: { bookings: true } },
       bookings: {
         where: { status: "CONFIRMED" },
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { title, description, scheduledAt, durationMins, capacityMax, priceCents, status } =
+  const { title, description, scheduledAt, durationMins, capacityMax, priceCents, status, pitchId } =
     await req.json();
 
   if (!title || !scheduledAt || !capacityMax || priceCents === undefined) {
@@ -49,8 +50,10 @@ export async function POST(req: Request) {
       capacityMax: Number(capacityMax),
       priceCents: Number(priceCents),
       status: status ?? "OPEN",
+      pitchId: pitchId || null,
     },
     include: {
+      pitch: { select: { id: true, name: true } },
       _count: { select: { bookings: true } },
       bookings: { where: { status: "CONFIRMED" }, select: { participantCount: true } },
     },

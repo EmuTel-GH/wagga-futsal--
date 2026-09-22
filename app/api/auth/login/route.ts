@@ -6,13 +6,20 @@ import { verifyPassword, createSession } from "@/lib/auth";
 export async function POST(req: Request) {
   const { email, password } = await req.json();
 
-  if (!email || !password) {
-    return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+  if (!email) {
+    return NextResponse.json({ error: "Email or username required" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+
+  // First sign-in for an account created without a password (e.g. imported
+  // referees): tell the client to run the create-password step instead.
+  if (user?.mustSetPassword) {
+    return NextResponse.json({ mustSetPassword: true });
+  }
+
+  if (!user || !password || !(await verifyPassword(password, user.passwordHash))) {
+    return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
   const token = await createSession(user.id);

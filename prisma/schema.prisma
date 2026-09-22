@@ -10,8 +10,12 @@ datasource db {
 
 model User {
   id           String       @id @default(cuid())
+  // Login identifier — an email address, or a firstname.lastname username
+  // for referees created without one.
   email        String       @unique
   passwordHash String
+  // True until the person sets their own password on first sign-in.
+  mustSetPassword Boolean   @default(false)
   name         String
   role         UserRole     @default(REFEREE)
   createdAt    DateTime     @default(now())
@@ -119,8 +123,12 @@ enum DispensationType {
 
 model PayRate {
   id            String   @id @default(cuid())
+  // Junior tier: U10–U14 games
   fieldRefCents Int      @default(5000)
   scorerCents   Int      @default(2500)
+  // Senior tier: U16 & Opens games
+  fieldRefSeniorCents Int @default(5000)
+  scorerSeniorCents   Int @default(2500)
   orgBsb        String?
   orgAccount    String?
   orgName       String?
@@ -153,6 +161,7 @@ model Pitch {
   venue    Venue    @relation(fields: [venueId], references: [id])
   slots    CompetitionTimeSlot[]
   fixtures Fixture[]
+  sessions FutsalSession[]
 }
 
 // ─── Competitions ────────────────────────────────────────────────────────────
@@ -376,9 +385,11 @@ model FutsalSession {
   durationMins Int           @default(60)
   capacityMax  Int
   priceCents   Int
+  pitchId      String?
   status       SessionStatus @default(OPEN)
   createdAt    DateTime      @default(now())
 
+  pitch    Pitch?           @relation(fields: [pitchId], references: [id])
   bookings SessionBooking[]
 }
 

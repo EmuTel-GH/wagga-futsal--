@@ -5,6 +5,8 @@ import { useState, useCallback } from "react";
 type RateRow = {
   fieldRefCents: number;
   scorerCents: number;
+  fieldRefSeniorCents: number;
+  scorerSeniorCents: number;
   orgBsb: string | null;
   orgAccount: string | null;
   orgName: string | null;
@@ -21,6 +23,8 @@ type Summary = {
   accountName: string | null;
   fieldRefGames: number;
   scorerGames: number;
+  seniorGames: number;
+  juniorGames: number;
   totalCents: number;
   hasBankDetails: boolean;
 };
@@ -45,6 +49,8 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
   const [rate, setRate] = useState<RateRow>(initialRate ?? {
     fieldRefCents: 5000,
     scorerCents: 2500,
+    fieldRefSeniorCents: 5000,
+    scorerSeniorCents: 2500,
     orgBsb: "",
     orgAccount: "",
     orgName: "Wagga Futsal",
@@ -67,6 +73,12 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
   const [scorerDollars, setScorerDollars] = useState(
     String((initialRate?.scorerCents ?? 2500) / 100)
   );
+  const [fieldRefSrDollars, setFieldRefSrDollars] = useState(
+    String((initialRate?.fieldRefSeniorCents ?? 5000) / 100)
+  );
+  const [scorerSrDollars, setScorerSrDollars] = useState(
+    String((initialRate?.scorerSeniorCents ?? 2500) / 100)
+  );
 
   const saveRate = async () => {
     setSavingRate(true);
@@ -76,11 +88,13 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
       body: JSON.stringify({
         fieldRefCents: Math.round(parseFloat(fieldRefDollars) * 100),
         scorerCents: Math.round(parseFloat(scorerDollars) * 100),
+        fieldRefSeniorCents: Math.round(parseFloat(fieldRefSrDollars) * 100),
+        scorerSeniorCents: Math.round(parseFloat(scorerSrDollars) * 100),
       }),
     });
     if (res.ok) {
       const data = await res.json();
-      setRate((r) => ({ ...r, fieldRefCents: data.fieldRefCents, scorerCents: data.scorerCents }));
+      setRate((r) => ({ ...r, ...data }));
     }
     setSavingRate(false);
   };
@@ -99,8 +113,10 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
       setRate((r) => ({ ...r, ...data.rate }));
       setFieldRefDollars(String((data.rate.fieldRefCents ?? rate.fieldRefCents) / 100));
       setScorerDollars(String((data.rate.scorerCents ?? rate.scorerCents) / 100));
+      setFieldRefSrDollars(String((data.rate.fieldRefSeniorCents ?? rate.fieldRefSeniorCents) / 100));
+      setScorerSrDollars(String((data.rate.scorerSeniorCents ?? rate.scorerSeniorCents) / 100));
     }
-  }, [from, to, rate.fieldRefCents, rate.scorerCents]);
+  }, [from, to, rate.fieldRefCents, rate.scorerCents, rate.fieldRefSeniorCents, rate.scorerSeniorCents]);
 
   const downloadABA = async () => {
     if (!rate.orgBsb || !rate.orgAccount || !rate.orgName || !rate.orgBank || !rate.orgApcaId) {
@@ -146,30 +162,67 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
 
       {/* Rate Card */}
       <div className="bg-white border border-border rounded-xl p-6">
-        <h2 className="text-lg font-black text-navy mb-4">Rate Card</h2>
+        <h2 className="text-lg font-black text-navy mb-1">Rate Card</h2>
+        <p className="text-xs text-muted mb-4">
+          Two tiers: junior games (U10–U14) and senior games (U16 &amp; Opens).
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs font-semibold text-muted mb-1">Field Referee (per game)</label>
-            <div className="flex items-center gap-2">
-              <span className="text-navy font-semibold">$</span>
-              <input
-                type="number" min="0" step="0.50"
-                value={fieldRefDollars}
-                onChange={(e) => setFieldRefDollars(e.target.value)}
-                className="border border-border rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-brand"
-              />
+          <div className="border border-border rounded-lg p-4">
+            <p className="text-xs font-bold text-navy uppercase tracking-wide mb-3">Junior games · U10–U14</p>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-muted mb-1">Field Referee</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-navy font-semibold">$</span>
+                  <input
+                    type="number" min="0" step="0.50"
+                    value={fieldRefDollars}
+                    onChange={(e) => setFieldRefDollars(e.target.value)}
+                    className="border border-border rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-muted mb-1">Scorer</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-navy font-semibold">$</span>
+                  <input
+                    type="number" min="0" step="0.50"
+                    value={scorerDollars}
+                    onChange={(e) => setScorerDollars(e.target.value)}
+                    className="border border-border rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-muted mb-1">Scorer (per game)</label>
-            <div className="flex items-center gap-2">
-              <span className="text-navy font-semibold">$</span>
-              <input
-                type="number" min="0" step="0.50"
-                value={scorerDollars}
-                onChange={(e) => setScorerDollars(e.target.value)}
-                className="border border-border rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-brand"
-              />
+          <div className="border border-border rounded-lg p-4">
+            <p className="text-xs font-bold text-navy uppercase tracking-wide mb-3">Senior games · U16 &amp; Opens</p>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-muted mb-1">Field Referee</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-navy font-semibold">$</span>
+                  <input
+                    type="number" min="0" step="0.50"
+                    value={fieldRefSrDollars}
+                    onChange={(e) => setFieldRefSrDollars(e.target.value)}
+                    className="border border-border rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-muted mb-1">Scorer</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-navy font-semibold">$</span>
+                  <input
+                    type="number" min="0" step="0.50"
+                    value={scorerSrDollars}
+                    onChange={(e) => setScorerSrDollars(e.target.value)}
+                    className="border border-border rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -294,6 +347,7 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
                         <th className="px-4 py-2.5 text-left font-semibold">Referee</th>
                         <th className="px-3 py-2.5 text-center font-semibold">Field Ref</th>
                         <th className="px-3 py-2.5 text-center font-semibold">Scorer</th>
+                        <th className="px-3 py-2.5 text-center font-semibold">Sr / Jr</th>
                         <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
                         <th className="px-3 py-2.5 text-left font-semibold">Bank</th>
                       </tr>
@@ -307,6 +361,7 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
                           </td>
                           <td className="px-3 py-2.5 text-center text-muted">{r.fieldRefGames || "—"}</td>
                           <td className="px-3 py-2.5 text-center text-muted">{r.scorerGames || "—"}</td>
+                          <td className="px-3 py-2.5 text-center text-muted text-xs">{r.seniorGames} / {r.juniorGames}</td>
                           <td className="px-3 py-2.5 text-right font-black text-brand">{fmt(r.totalCents)}</td>
                           <td className="px-3 py-2.5">
                             {r.hasBankDetails ? (
@@ -322,7 +377,7 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
                     </tbody>
                     <tfoot className="border-t-2 border-border bg-gray-50">
                       <tr>
-                        <td colSpan={3} className="px-4 py-2.5 text-sm font-semibold text-navy">
+                        <td colSpan={4} className="px-4 py-2.5 text-sm font-semibold text-navy">
                           Total payable ({payable.length} referee{payable.length !== 1 ? "s" : ""})
                         </td>
                         <td className="px-3 py-2.5 text-right font-black text-navy text-base">

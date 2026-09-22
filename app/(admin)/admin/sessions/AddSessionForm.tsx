@@ -11,13 +11,16 @@ type Session = {
   capacityMax: number;
   priceCents: number;
   status: string;
+  pitch?: { id: string; name: string } | null;
   _count: { bookings: number };
   bookings: { participantCount: number }[];
 };
 
-type Props = { onCreated: (session: Session) => void };
+type Pitch = { id: string; name: string };
 
-export default function AddSessionForm({ onCreated }: Props) {
+type Props = { onCreated: (session: Session) => void; pitches: Pitch[] };
+
+export default function AddSessionForm({ onCreated, pitches }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -29,6 +32,7 @@ export default function AddSessionForm({ onCreated }: Props) {
     capacityMax: "20",
     priceDollars: "20",
     status: "OPEN",
+    pitchId: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,13 +51,14 @@ export default function AddSessionForm({ onCreated }: Props) {
         capacityMax: Number(form.capacityMax),
         priceCents,
         status: form.status,
+        pitchId: form.pitchId || null,
       }),
     });
     const data = await res.json();
     setSaving(false);
     if (!res.ok) { setError(data.error ?? "Failed to create session"); return; }
     onCreated(data);
-    setForm({ title: "", description: "", scheduledAt: "", durationMins: "60", capacityMax: "20", priceDollars: "20", status: "OPEN" });
+    setForm({ title: "", description: "", scheduledAt: "", durationMins: "60", capacityMax: "20", priceDollars: "20", status: "OPEN", pitchId: "" });
     setOpen(false);
   };
 
@@ -104,6 +109,16 @@ export default function AddSessionForm({ onCreated }: Props) {
           <input type="number" required value={form.priceDollars} min={0} step={0.01}
             onChange={(e) => setForm((f) => ({ ...f, priceDollars: e.target.value }))}
             className="border border-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted mb-1">Pitch</label>
+          <select value={form.pitchId} onChange={(e) => setForm((f) => ({ ...f, pitchId: e.target.value }))}
+            className="border border-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="">No pitch assigned</option>
+            {pitches.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted mb-1">Status</label>

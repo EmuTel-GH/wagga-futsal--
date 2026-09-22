@@ -127,6 +127,7 @@ export default function TeamRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [addPlayerForm, setAddPlayerForm] = useState({ playerId: "", jerseyNumber: "" });
+  const [playerQuery, setPlayerQuery] = useState("");
   const [addCompForm, setAddCompForm] = useState(allCompetitions[0]?.id ?? "");
   const [playerSaving, setPlayerSaving] = useState(false);
   const [compSaving, setCompSaving] = useState(false);
@@ -349,29 +350,51 @@ export default function TeamRow({
             )}
 
             {availablePlayers.length > 0 && (
-              <form onSubmit={handleAddPlayer} className="flex gap-2 items-center flex-wrap mt-1">
-                <select
-                  value={addPlayerForm.playerId}
-                  onChange={(e) => setAddPlayerForm((f) => ({ ...f, playerId: e.target.value }))}
-                  className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
-                >
-                  <option value="">Select player…</option>
-                  {availablePlayers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="Jersey #"
-                  value={addPlayerForm.jerseyNumber}
-                  onChange={(e) => setAddPlayerForm((f) => ({ ...f, jerseyNumber: e.target.value }))}
-                  className="border border-border rounded px-2 py-1.5 text-xs w-20 focus:outline-none"
-                />
-                <button type="submit" disabled={playerSaving || !addPlayerForm.playerId}
-                  className="bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
-                  {playerSaving ? "Adding…" : "Add Player"}
-                </button>
-                {playerError && <span className="text-xs text-red-600">{playerError}</span>}
+              <form onSubmit={handleAddPlayer} className="mt-1">
+                <div className="flex gap-2 items-center flex-wrap">
+                  <input
+                    type="text"
+                    placeholder="Search player by name…"
+                    value={playerQuery}
+                    onChange={(e) => {
+                      setPlayerQuery(e.target.value);
+                      setAddPlayerForm((f) => ({ ...f, playerId: "" }));
+                    }}
+                    className="border border-border rounded px-2 py-1.5 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-brand"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Jersey #"
+                    value={addPlayerForm.jerseyNumber}
+                    onChange={(e) => setAddPlayerForm((f) => ({ ...f, jerseyNumber: e.target.value }))}
+                    className="border border-border rounded px-2 py-1.5 text-xs w-20 focus:outline-none"
+                  />
+                  <button type="submit" disabled={playerSaving || !addPlayerForm.playerId}
+                    className="bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
+                    {playerSaving ? "Adding…" : "Add Player"}
+                  </button>
+                  {playerError && <span className="text-xs text-red-600">{playerError}</span>}
+                </div>
+                {playerQuery.length >= 2 && !addPlayerForm.playerId && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {availablePlayers
+                      .filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(playerQuery.toLowerCase()))
+                      .slice(0, 8)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setAddPlayerForm((f) => ({ ...f, playerId: p.id }));
+                            setPlayerQuery(`${p.firstName} ${p.lastName}`);
+                          }}
+                          className="bg-white border border-border rounded-full px-2.5 py-1 text-xs hover:border-brand hover:text-brand"
+                        >
+                          {p.firstName} {p.lastName}
+                        </button>
+                      ))}
+                  </div>
+                )}
               </form>
             )}
           </div>

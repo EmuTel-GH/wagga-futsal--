@@ -12,9 +12,12 @@ type Session = {
   capacityMax: number;
   priceCents: number;
   status: string;
+  pitch?: { id: string; name: string } | null;
   _count: { bookings: number };
   bookings: { participantCount: number }[];
 };
+
+type Pitch = { id: string; name: string };
 
 const STATUS_COLOURS: Record<string, string> = {
   OPEN: "bg-green-100 text-green-700",
@@ -22,7 +25,7 @@ const STATUS_COLOURS: Record<string, string> = {
   CANCELLED: "bg-red-100 text-red-700",
 };
 
-export default function SessionsClient({ initialSessions }: { initialSessions: Session[] }) {
+export default function SessionsClient({ initialSessions, pitches }: { initialSessions: Session[]; pitches: Pitch[] }) {
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
 
   const handleCreated = (s: Session) => setSessions((prev) => [s, ...prev]);
@@ -48,7 +51,7 @@ export default function SessionsClient({ initialSessions }: { initialSessions: S
   return (
     <>
       <div className="mb-6">
-        <AddSessionForm onCreated={handleCreated} />
+        <AddSessionForm onCreated={handleCreated} pitches={pitches} />
       </div>
 
       {sessions.length === 0 ? (
@@ -75,6 +78,7 @@ export default function SessionsClient({ initialSessions }: { initialSessions: S
                   <span>👥 {confirmedParticipants} / {s.capacityMax} confirmed</span>
                   <span>💰 ${(s.priceCents / 100).toFixed(2)}</span>
                   <span>📋 {s._count.bookings} total bookings</span>
+                  <span>📍 {s.pitch?.name ?? "No pitch assigned"}</span>
                 </div>
 
                 <div className="flex gap-2 mt-4">

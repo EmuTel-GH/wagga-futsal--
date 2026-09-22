@@ -41,8 +41,31 @@ export default function FixturesClient({
   selectedCompId: string;
 }) {
   const [fixtures, setFixtures] = useState<Fixture[]>(initialFixtures);
+  const [drawDate, setDrawDate] = useState("");
+  const [drawBusy, setDrawBusy] = useState(false);
+  const [drawMsg, setDrawMsg] = useState("");
 
   const handleUpdated = (f: Fixture) => setFixtures((prev) => prev.map((x) => (x.id === f.id ? f : x)));
+
+  const handleGenerateDraw = async () => {
+    if (!selectedCompId || !drawDate) return;
+    const comp = competitions.find((c) => c.id === selectedCompId);
+    if (!confirm(`Generate the draw for ${comp?.name}? Existing unplayed scheduled fixtures for this competition will be replaced.`)) return;
+    setDrawBusy(true);
+    setDrawMsg("");
+    const res = await fetch("/api/admin/draw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ competitionId: selectedCompId, startDate: drawDate }),
+    });
+    const data = await res.json();
+    setDrawBusy(false);
+    if (!res.ok) {
+      setDrawMsg(data.error ?? "Failed to generate draw");
+      return;
+    }
+    window.location.reload();
+  };
 
   // Group by round
   const rounds = Array.from(new Set(fixtures.map((f) => f.round))).sort((a, b) => a - b);
@@ -67,10 +90,36 @@ export default function FixturesClient({
             <option key={c.id} value={c.id}>{c.name} ({c.season})</option>
           ))}
         </select>
+
+        {selectedCompId && (
+          <div className="flex items-center gap-2 ml-auto">
+            <input
+              type="date"
+              value={drawDate}
+              onChange={(e) => setDrawDate(e.target.value)}
+              className="border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <button
+              onClick={handleGenerateDraw}
+              disabled={drawBusy || !drawDate}
+              className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-dark disabled:opacity-60"
+            >
+              {drawBusy ? "Generating…" : "Generate Draw"}
+            </button>
+          </div>
+        )}
       </div>
 
+      {drawMsg && (
+        <p className="text-sm text-red-600 mb-4">{drawMsg}</p>
+      )}
+
       {rounds.length === 0 ? (
-        <p className="text-muted text-sm">No fixtures found.</p>
+        <p className="text-muted text-sm">
+          {selectedCompId
+            ? "No fixtures yet — pick the season start date above and hit Generate Draw (teams play each other twice; Opens three times)."
+            : "No fixtures found. Select a competition to generate its draw."}
+        </p>
       ) : (
         rounds.map((round) => {
           const roundFixtures = fixtures.filter((f) => f.round === round);
