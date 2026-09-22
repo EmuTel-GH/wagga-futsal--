@@ -38,7 +38,9 @@ export async function POST(req: Request) {
   });
 
   const teams = competition.teams.map((ct) => ({ id: ct.teamId }));
-  const rounds = generateRoundRobin(teams);
+  // Teams meet twice per season; Opens meet three times.
+  const cycles = competition.ageGroup === "OPENS" ? 3 : 2;
+  const rounds = generateRoundRobin(teams, cycles);
   const slots = competition.timeSlots.map((s) => ({
     pitchId: s.pitchId,
     dayOfWeek: s.dayOfWeek,

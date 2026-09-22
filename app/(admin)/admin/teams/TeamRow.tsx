@@ -17,14 +17,94 @@ type CompetitionTeam = { id: string; teamId: string; competition: CompetitionRef
 type Team = {
   id: string;
   name: string;
+  contactName?: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  kitShirt?: string | null;
+  kitShorts?: string | null;
+  kitSocks?: string | null;
   _count: { players: number };
   competitions: CompetitionTeam[];
   players: TeamPlayer[];
 };
 
 type Competition = { id: string; name: string; season: string };
+
+function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    contactName: team.contactName ?? "",
+    contactEmail: team.contactEmail ?? "",
+    contactPhone: team.contactPhone ?? "",
+    kitShirt: team.kitShirt ?? "",
+    kitShorts: team.kitShorts ?? "",
+    kitSocks: team.kitSocks ?? "",
+  });
+
+  const handleSave = async () => {
+    setSaving(true);
+    const res = await fetch(`/api/admin/teams/${team.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    setSaving(false);
+    if (!res.ok) return;
+    const updated = await res.json();
+    onUpdated({ ...team, ...updated });
+    setEditing(false);
+  };
+
+  if (!editing) {
+    const contact = [team.contactName, team.contactEmail, team.contactPhone].filter(Boolean).join(" · ");
+    const kit = [team.kitShirt, team.kitShorts, team.kitSocks].filter(Boolean).join(" / ");
+    return (
+      <p className="text-xs text-muted mt-2">
+        {contact && <span>👤 {contact}</span>}
+        {contact && kit && <span> &nbsp;·&nbsp; </span>}
+        {kit && <span>👕 {kit}</span>}
+        {!contact && !kit && <span className="italic">No contact or kit details yet.</span>}
+        <button onClick={() => setEditing(true)} className="ml-2 text-brand font-semibold hover:underline">
+          Edit
+        </button>
+      </p>
+    );
+  }
+
+  const field = (key: keyof typeof form, label: string) => (
+    <div>
+      <label className="block text-[10px] font-semibold text-muted mb-0.5">{label}</label>
+      <input
+        value={form[key]}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        className="border border-border rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-brand"
+      />
+    </div>
+  );
+
+  return (
+    <div className="mt-2 bg-white border border-border rounded-lg p-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+        {field("contactName", "Contact name")}
+        {field("contactEmail", "Contact email")}
+        {field("contactPhone", "Contact phone")}
+        {field("kitShirt", "Shirt")}
+        {field("kitShorts", "Shorts")}
+        {field("kitSocks", "Socks")}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleSave} disabled={saving}
+          className="bg-brand text-white px-3 py-1 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button onClick={() => setEditing(false)} className="border border-border px-2 py-1 rounded text-xs hover:border-brand">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function TeamRow({
   team,
@@ -145,14 +225,8 @@ export default function TeamRow({
 
       {expanded && (
         <div className="px-4 pb-4 bg-gray-50 border-t border-border">
-          {/* Contact info */}
-          {(team.contactEmail || team.contactPhone) && (
-            <p className="text-xs text-muted mt-2">
-              {team.contactEmail && <span>{team.contactEmail}</span>}
-              {team.contactEmail && team.contactPhone && <span> · </span>}
-              {team.contactPhone && <span>{team.contactPhone}</span>}
-            </p>
-          )}
+          {/* Contact + kit details */}
+          <TeamDetails team={team} onUpdated={onUpdated} />
 
           {/* Player roster */}
           <div className="mt-3">

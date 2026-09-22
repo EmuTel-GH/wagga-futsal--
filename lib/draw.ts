@@ -17,14 +17,16 @@ interface Fixture {
   scheduledAt: Date;
 }
 
-// Generate a round-robin schedule (Berger tables algorithm)
-export function generateRoundRobin(teams: DrawTeam[]): Array<[string, string][]> {
+// Generate a round-robin schedule (Berger tables algorithm).
+// `cycles` = how many times each pair meets: season default is 2 (teams play
+// each other twice); Opens plays 3. Home/away alternates between cycles.
+export function generateRoundRobin(teams: DrawTeam[], cycles = 2): Array<[string, string][]> {
   const list = [...teams];
   const hasBye = list.length % 2 !== 0;
   if (hasBye) list.push({ id: "BYE" });
 
   const n = list.length;
-  const rounds: Array<[string, string][]> = [];
+  const single: Array<[string, string][]> = [];
 
   for (let round = 0; round < n - 1; round++) {
     const pairs: [string, string][] = [];
@@ -35,11 +37,19 @@ export function generateRoundRobin(teams: DrawTeam[]): Array<[string, string][]>
         pairs.push([home.id, away.id]);
       }
     }
-    rounds.push(pairs);
+    single.push(pairs);
 
     // rotate all but first element
     const last = list.splice(n - 1, 1)[0];
     list.splice(1, 0, last);
+  }
+
+  const rounds: Array<[string, string][]> = [];
+  for (let c = 0; c < cycles; c++) {
+    for (const pairs of single) {
+      // Flip home/away on every second cycle so venues/kick-offs balance out.
+      rounds.push(c % 2 === 1 ? pairs.map(([h, a]): [string, string] => [a, h]) : pairs);
+    }
   }
 
   return rounds;

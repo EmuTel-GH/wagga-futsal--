@@ -188,8 +188,13 @@ model CompetitionTimeSlot {
 model Team {
   id           String   @id @default(cuid())
   name         String
+  contactName  String?
   contactEmail String?
   contactPhone String?
+  // Kit colours (from the team nomination)
+  kitShirt     String?
+  kitShorts    String?
+  kitSocks     String?
   createdAt    DateTime @default(now())
 
   players      TeamPlayer[]

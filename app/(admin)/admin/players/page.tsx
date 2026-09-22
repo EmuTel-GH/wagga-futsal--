@@ -10,6 +10,7 @@ type Player = {
   gender: string;
   playFootballId: string | null;
   registeredAgeGroup: string | null;
+  teamPlayers?: { isPrimary: boolean; team: { name: string } }[];
 };
 
 type ImportSummary = {
@@ -25,13 +26,14 @@ export default function PlayersAdmin() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [search, setSearch] = useState("");
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/players?" + new URLSearchParams({ q: search }))
+    fetch("/api/admin/players?" + new URLSearchParams({ q: search, unassigned: unassignedOnly ? "1" : "" }))
       .then((r) => r.json())
       .then(setPlayers)
       .catch(() => {});
-  }, [search]);
+  }, [search, unassignedOnly]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,12 +82,23 @@ export default function PlayersAdmin() {
         </div>
       )}
 
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search by name…"
-        className="w-full border border-border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-brand"
-      />
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name…"
+          className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <label className="flex items-center gap-2 text-sm text-navy font-medium whitespace-nowrap cursor-pointer">
+          <input
+            type="checkbox"
+            checked={unassignedOnly}
+            onChange={(e) => setUnassignedOnly(e.target.checked)}
+            className="accent-[#E91E8C]"
+          />
+          Unassigned only
+        </label>
+      </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
@@ -95,6 +108,7 @@ export default function PlayersAdmin() {
               <th className="px-4 py-3 text-left font-semibold">DOB</th>
               <th className="px-4 py-3 text-left font-semibold">Age Group</th>
               <th className="px-4 py-3 text-left font-semibold">Gender</th>
+              <th className="px-4 py-3 text-left font-semibold">Team(s)</th>
               <th className="px-4 py-3 text-left font-semibold">FFA Number</th>
             </tr>
           </thead>
@@ -109,6 +123,21 @@ export default function PlayersAdmin() {
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-muted capitalize">{p.gender.toLowerCase()}</td>
+                <td className="px-4 py-2.5 text-xs">
+                  {p.teamPlayers && p.teamPlayers.length > 0 ? (
+                    p.teamPlayers.map((tp, i) => (
+                      <span key={i}>
+                        {i > 0 && ", "}
+                        {tp.team.name}
+                        {!tp.isPrimary && <span className="text-amber-700"> (2nd)</span>}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-semibold">
+                      Unassigned
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-muted font-mono text-xs">{p.playFootballId ?? "—"}</td>
               </tr>
             ))}

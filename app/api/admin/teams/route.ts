@@ -33,14 +33,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, contactEmail, contactPhone } = await req.json();
+  const { name, contactName, contactEmail, contactPhone, kitShirt, kitShorts, kitSocks } = await req.json();
 
   if (!name) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
   const team = await prisma.team.create({
-    data: { name, contactEmail: contactEmail || null, contactPhone: contactPhone || null },
+    data: {
+      name,
+      contactName: contactName || null,
+      contactEmail: contactEmail || null,
+      contactPhone: contactPhone || null,
+      kitShirt: kitShirt || null,
+      kitShorts: kitShorts || null,
+      kitSocks: kitSocks || null,
+    },
     include: {
       _count: { select: { players: true } },
       competitions: { include: { competition: { select: { id: true, name: true, season: true } } } },

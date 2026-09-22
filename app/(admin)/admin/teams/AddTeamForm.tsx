@@ -18,7 +18,7 @@ export default function AddTeamForm({ onCreated }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", contactEmail: "", contactPhone: "" });
+  const [form, setForm] = useState({ name: "", contactName: "", contactEmail: "", contactPhone: "" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +33,7 @@ export default function AddTeamForm({ onCreated }: Props) {
     setSaving(false);
     if (!res.ok) { setError(data.error ?? "Failed to create team"); return; }
     onCreated(data);
-    setForm({ name: "", contactEmail: "", contactPhone: "" });
+    setForm({ name: "", contactName: "", contactEmail: "", contactPhone: "" });
     setOpen(false);
   };
 
@@ -49,11 +49,16 @@ export default function AddTeamForm({ onCreated }: Props) {
     <form onSubmit={handleSubmit} className="bg-white border border-border rounded-xl p-5 mb-6">
       <h2 className="text-base font-bold text-navy mb-4">New Team</h2>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div>
           <label className="block text-xs font-semibold text-muted mb-1">Team Name</label>
           <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="e.g. FC Wagga" className="border border-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted mb-1">Contact Name</label>
+          <input value={form.contactName} onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))}
+            placeholder="Nominating coach/manager" className="border border-border rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
           <label className="block text-xs font-semibold text-muted mb-1">Contact Email</label>

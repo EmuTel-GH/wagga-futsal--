@@ -52,15 +52,16 @@ export default function RegisterPage() {
             Register Now
           </a>
           <p className="text-white/50 text-sm mt-3">
-            Registration via PlayFootball · short link:{" "}
+            Registration via{" "}
             <a
-              href="https://bit.ly/3TxOP64"
+              href={REGISTER_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand hover:underline"
             >
-              bit.ly/3TxOP64
-            </a>
+              PlayFootball
+            </a>{" "}
+            — search &ldquo;Wagga Futsal&rdquo;
           </p>
         </div>
       </section>
