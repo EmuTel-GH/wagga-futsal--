@@ -3,7 +3,14 @@
 import { useState } from "react";
 
 type Player = { id: string; firstName: string; lastName: string };
-type TeamPlayer = { id: string; playerId: string; jerseyNumber: number | null; player: Player };
+type TeamPlayer = {
+  id: string;
+  playerId: string;
+  jerseyNumber: number | null;
+  isPrimary?: boolean;
+  additionalFeePaid?: boolean;
+  player: Player;
+};
 type CompetitionRef = { id: string; name: string; season: string };
 type CompetitionTeam = { id: string; teamId: string; competition: CompetitionRef };
 
@@ -59,6 +66,20 @@ export default function TeamRow({
       _count: { players: team._count.players + 1 },
     });
     setAddPlayerForm({ playerId: "", jerseyNumber: "" });
+  };
+
+  const handleToggleFee = async (tp: TeamPlayer) => {
+    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: tp.playerId, additionalFeePaid: !tp.additionalFeePaid }),
+    });
+    if (!res.ok) return;
+    const updated = await res.json();
+    onUpdated({
+      ...team,
+      players: team.players.map((p) => (p.playerId === tp.playerId ? { ...p, ...updated } : p)),
+    });
   };
 
   const handleRemovePlayer = async (playerId: string) => {
@@ -150,7 +171,22 @@ export default function TeamRow({
                 <tbody className="divide-y divide-border">
                   {team.players.map((tp) => (
                     <tr key={tp.id}>
-                      <td className="py-1">{tp.player.firstName} {tp.player.lastName}</td>
+                      <td className="py-1">
+                        {tp.player.firstName} {tp.player.lastName}
+                        {tp.isPrimary === false && (
+                          <button
+                            onClick={() => handleToggleFee(tp)}
+                            title="Additional team — click to toggle the $135 fee as paid/unpaid"
+                            className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              tp.additionalFeePaid
+                                ? "bg-green-50 border-green-300 text-green-700"
+                                : "bg-amber-50 border-amber-300 text-amber-700"
+                            }`}
+                          >
+                            2nd team · {tp.additionalFeePaid ? "$135 paid" : "$135 owing"}
+                          </button>
+                        )}
+                      </td>
                       <td className="py-1 text-muted">{tp.jerseyNumber ?? "—"}</td>
                       <td className="py-1">
                         <button

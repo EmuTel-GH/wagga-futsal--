@@ -95,7 +95,7 @@ export default function RegisterPage() {
         {/* Fees */}
         <section>
           <h2 className="text-3xl font-black text-navy text-center mb-8">Registration Fees</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
             <div className="bg-white border border-border rounded-2xl p-8 text-center">
               <p className="text-muted text-sm font-semibold uppercase tracking-widest mb-2">
                 Junior Player
@@ -110,7 +110,19 @@ export default function RegisterPage() {
               <p className="text-5xl font-black text-navy">$230</p>
               <p className="text-muted text-sm mt-2">Opens divisions</p>
             </div>
+            <div className="bg-white border border-border rounded-2xl p-8 text-center">
+              <p className="text-muted text-sm font-semibold uppercase tracking-widest mb-2">
+                Additional Team
+              </p>
+              <p className="text-5xl font-black text-navy">$135</p>
+              <p className="text-muted text-sm mt-2">per extra team you join</p>
+            </div>
           </div>
+          <p className="text-center text-muted text-sm mt-5 max-w-2xl mx-auto">
+            Your registration covers your first team. Want more court time? You can also play for
+            additional teams in <span className="font-semibold text-navy">other competitions</span> for
+            $135 per extra team — arranged directly with Wagga Futsal.
+          </p>
         </section>
 
         {/* How to register + contact */}

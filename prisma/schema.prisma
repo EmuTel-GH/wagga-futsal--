@@ -205,6 +205,11 @@ model TeamPlayer {
   teamId       String
   playerId     String
   jerseyNumber Int?
+  // A player's first team is their primary (covered by their registration).
+  // Each additional team costs the $135 additional-team fee, and must be in a
+  // different competition (rule 22.1 — no two teams in the same comp).
+  isPrimary          Boolean  @default(true)
+  additionalFeePaid  Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -222,6 +227,9 @@ model CompetitionTeam {
   competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
+  // A team is bound to exactly one competition (whole teams cannot register
+  // into multiple comps — players join additional teams instead).
+  @@unique([teamId])
   @@unique([competitionId, teamId])
 }
 
