@@ -144,7 +144,7 @@ export default async function HomePage() {
           <div className="text-center sm:text-left">
             <p className="font-black text-lg leading-tight">Summer 2026 kicks off 14–15 October</p>
             <p className="text-white/85 text-sm">
-              Wed: U8 · U10 · U16 · Opens &nbsp;|&nbsp; Thu: U12 · U14 &nbsp;·&nbsp; $215 juniors / $230
+              Wed: U10 · U16 · Opens &nbsp;|&nbsp; Thu: U12 · U14 &nbsp;·&nbsp; $215 juniors / $230
               seniors
             </p>
           </div>

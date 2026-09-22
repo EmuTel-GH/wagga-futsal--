@@ -27,10 +27,12 @@ type Team = {
   competitions: CompetitionTeam[];
   players: TeamPlayer[];
   officials?: Official[];
+  expected?: Expected[];
 };
 
 type Competition = { id: string; name: string; season: string };
 type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
+type Expected = { id: string; firstName: string; lastName: string };
 
 function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => void }) {
   const [editing, setEditing] = useState(false);
@@ -177,6 +179,48 @@ export default function TeamRow({
 
   const [officialId, setOfficialId] = useState("");
   const [officialSaving, setOfficialSaving] = useState(false);
+  const [expectedOpen, setExpectedOpen] = useState(false);
+  const [expectedText, setExpectedText] = useState("");
+  const [expectedSaving, setExpectedSaving] = useState(false);
+  const [expectedError, setExpectedError] = useState("");
+
+  const handleSaveExpected = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setExpectedSaving(true);
+    const res = await fetch(`/api/admin/teams/${team.id}/expected`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ names: expectedText }),
+    });
+    setExpectedSaving(false);
+    if (!res.ok) return;
+    const expected = await res.json();
+    onUpdated({ ...team, expected });
+    setExpectedOpen(false);
+  };
+
+  // Match an expected name against actual registrations (case-insensitive).
+  const matchPlayer = (ex: Expected) =>
+    allPlayers.find(
+      (p) =>
+        p.firstName.toLowerCase() === ex.firstName.toLowerCase() &&
+        p.lastName.toLowerCase() === ex.lastName.toLowerCase()
+    );
+
+  const handleQuickAdd = async (playerId: string) => {
+    setExpectedError("");
+    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setExpectedError(data.error ?? "Failed");
+      return;
+    }
+    onUpdated({ ...team, players: [...team.players, data], _count: { players: team._count.players + 1 } });
+  };
 
   const handleAddOfficial = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,6 +374,64 @@ export default function TeamRow({
                 {playerError && <span className="text-xs text-red-600">{playerError}</span>}
               </form>
             )}
+          </div>
+
+          {/* Expected squad (from the team registration form) */}
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-xs font-bold text-navy uppercase tracking-wide">Expected Squad</p>
+              <button
+                onClick={() => { setExpectedText((team.expected ?? []).map((x) => `${x.firstName} ${x.lastName}`.trim()).join("\n")); setExpectedOpen((v) => !v); }}
+                className="text-xs text-brand font-semibold hover:underline"
+              >
+                {expectedOpen ? "Cancel" : (team.expected ?? []).length > 0 ? "Edit list" : "Paste from registration form"}
+              </button>
+            </div>
+
+            {expectedOpen ? (
+              <form onSubmit={handleSaveExpected} className="mb-2">
+                <textarea
+                  value={expectedText}
+                  onChange={(e) => setExpectedText(e.target.value)}
+                  rows={6}
+                  placeholder={"One player per line, e.g.\nHarrison Heller\nLoch Wealands"}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand"
+                />
+                <button type="submit" disabled={expectedSaving}
+                  className="mt-1 bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
+                  {expectedSaving ? "Saving…" : "Save expected squad"}
+                </button>
+              </form>
+            ) : (team.expected ?? []).length === 0 ? (
+              <p className="text-xs text-muted mb-1">
+                None recorded — paste the player list from the team&apos;s registration form.
+              </p>
+            ) : (
+              <ul className="text-xs mb-1 space-y-1">
+                {(team.expected ?? []).map((ex) => {
+                  const match = matchPlayer(ex);
+                  const inTeam = match && team.players.some((tp) => tp.playerId === match.id);
+                  return (
+                    <li key={ex.id} className="flex items-center gap-2">
+                      <span>{ex.firstName} {ex.lastName}</span>
+                      {inTeam ? (
+                        <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full">✓ in team</span>
+                      ) : match ? (
+                        <>
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">registered — not in team</span>
+                          <button onClick={() => handleQuickAdd(match.id)} className="text-brand text-xs font-semibold hover:underline">
+                            Add
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">not registered yet</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {expectedError && <p className="text-xs text-red-600">{expectedError}</p>}
           </div>
 
           {/* Officials (coach / manager) */}

@@ -16,6 +16,7 @@ export default async function TeamsPage() {
           orderBy: { jerseyNumber: "asc" },
         },
         officials: { orderBy: { lastName: "asc" } },
+        expected: { orderBy: { createdAt: "asc" } },
       },
       orderBy: { name: "asc" },
     }),

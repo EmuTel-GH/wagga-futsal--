@@ -27,7 +27,9 @@ type Band = { cutoffOffset: number | null; minAge: number };
 // minAge: minimum age (rule 7.2 table; juniors overall 5–16 per rule 1.1).
 const BANDS: Partial<Record<AgeGroup, Band>> = {
   U8: { cutoffOffset: 8, minAge: 5 },
-  U10: { cutoffOffset: 10, minAge: 8 },
+  // The club runs no U8 competition in 2026/27 — the 10s are the youngest
+  // group and absorb the 5–7 year olds, hence minAge 5 (not rule 7.2's 8).
+  U10: { cutoffOffset: 10, minAge: 5 },
   U12: { cutoffOffset: 12, minAge: 9 },
   U14: { cutoffOffset: 14, minAge: 11 },
   U16: { cutoffOffset: 16, minAge: 13 },
@@ -69,9 +71,14 @@ export function meetsMinAge(dob: Date, group: AgeGroup): boolean {
  * The group a player naturally registers in: the youngest group whose band
  * their date of birth fits. Returns null if they fit no band (e.g. under 5).
  */
+// Groups the club is not running this season — never assigned as a
+// registered group (their players fall into the next group up).
+const NOT_RUN: AgeGroup[] = ["U8", "U19"];
+
 export function defaultRegisteredGroup(dob: Date): AgeGroup | null {
   for (const g of ORDER) {
     if (g === "SOCIAL") continue; // SOCIAL is a choice, not a default
+    if (NOT_RUN.includes(g)) continue;
     if (fitsBand(dob, g)) return g;
   }
   return null;

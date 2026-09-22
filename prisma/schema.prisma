@@ -199,10 +199,24 @@ model Team {
 
   players      TeamPlayer[]
   officials    TeamOfficial[]
+  expected     ExpectedPlayer[]
   competitions CompetitionTeam[]
   homeFixtures Fixture[]   @relation("HomeTeam")
   awayFixtures Fixture[]   @relation("AwayTeam")
   events       MatchEvent[]
+}
+
+// A name from the team registration form: the coach/manager's EXPECTED squad.
+// Not necessarily registered on PlayFootball yet — the admin UI matches these
+// against actual registrations by name and shows who is still outstanding.
+model ExpectedPlayer {
+  id        String   @id @default(cuid())
+  teamId    String
+  firstName String
+  lastName  String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model TeamPlayer {

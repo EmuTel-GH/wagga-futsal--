@@ -11,11 +11,10 @@ const KICKOFF = [
     day: "Wednesday",
     date: "14 October 2026",
     divisions: [
-      { name: "U8 Mixed", time: "4:30pm" },
-      { name: "U10 Division 2", time: "5:00pm" },
-      { name: "U10 Division 1", time: "5:30pm" },
-      { name: "U16 Mixed", time: "6:00pm / 6:35pm" },
-      { name: "Opens", time: "7:05pm / 7:50pm" },
+      { name: "U10 Division 2", time: "4:30pm" },
+      { name: "U10 Division 1", time: "5:00pm" },
+      { name: "U16 Mixed", time: "5:30pm / 6:00pm" },
+      { name: "Opens", time: "6:35pm" },
     ],
   },
   {
@@ -104,7 +103,7 @@ export default function RegisterPage() {
                 Junior Player
               </p>
               <p className="text-5xl font-black text-navy">$215</p>
-              <p className="text-muted text-sm mt-2">U8 – U16 divisions</p>
+              <p className="text-muted text-sm mt-2">U10 – U16 divisions</p>
             </div>
             <div className="bg-white border border-border rounded-2xl p-8 text-center">
               <p className="text-muted text-sm font-semibold uppercase tracking-widest mb-2">
