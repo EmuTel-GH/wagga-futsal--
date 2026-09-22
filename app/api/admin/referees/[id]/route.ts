@@ -41,7 +41,12 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: "Referee not found" }, { status: 404 });
   }
 
-  await prisma.user.delete({ where: { id: referee.userId } });
+  if (referee.userId) {
+    // Deleting the login cascades to the referee record.
+    await prisma.user.delete({ where: { id: referee.userId } });
+  } else {
+    await prisma.referee.delete({ where: { id } });
+  }
 
   return NextResponse.json({ ok: true });
 }

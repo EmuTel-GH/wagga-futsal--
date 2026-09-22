@@ -9,9 +9,15 @@ type Referee = {
   bsb: string | null;
   accountNumber: string | null;
   accountName: string | null;
-  user: { id: string; name: string; email: string; role: string };
+  firstName?: string | null;
+  lastName?: string | null;
+  // Null for referees imported from PlayFootball who don't have a login yet.
+  user: { id: string; name: string; email: string; role: string } | null;
   _count: { fieldRefGames: number };
 };
+
+const refName = (r: Referee) =>
+  r.user?.name ?? [r.firstName, r.lastName].filter(Boolean).join(" ") ?? "Unnamed referee";
 
 function BankEditor({ referee, onSaved }: { referee: Referee; onSaved: (r: Referee) => void }) {
   const [open, setOpen] = useState(false);
@@ -135,8 +141,10 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
             ) : (
               referees.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-semibold">{r.user.name}</td>
-                  <td className="px-4 py-2.5 text-muted">{r.user.email}</td>
+                  <td className="px-4 py-2.5 font-semibold">{refName(r)}</td>
+                  <td className="px-4 py-2.5 text-muted">
+                    {r.user?.email ?? <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">no login yet</span>}
+                  </td>
                   <td className="px-4 py-2.5 text-muted">{r.phone ?? "—"}</td>
                   <td className="px-4 py-2.5 text-muted">{r._count.fieldRefGames}</td>
                   <td className="px-4 py-2.5">
@@ -152,7 +160,7 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
                   </td>
                   <td className="px-4 py-2.5">
                     <button
-                      onClick={() => handleDelete(r.id, r.user.name)}
+                      onClick={() => handleDelete(r.id, refName(r))}
                       className="bg-red-500 text-white px-3 py-1.5 rounded text-sm hover:bg-red-600"
                     >
                       Delete

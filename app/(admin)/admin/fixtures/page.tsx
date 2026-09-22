@@ -35,13 +35,24 @@ export default async function FixturesPage({ searchParams }: Props) {
     }),
   ]);
 
+  // Referees imported from PlayFootball may have no linked login (user = null);
+  // present a display name either way so the client components stay simple.
+  const refName = (r: { user: { name: string } | null; firstName: string | null; lastName: string | null }) =>
+    r.user?.name ?? [r.firstName, r.lastName].filter(Boolean).join(" ") ?? "Unnamed referee";
+  const refereesForClient = referees.map((r) => ({ id: r.id, user: { id: r.user?.id ?? r.id, name: refName(r) } }));
+  const fixturesForClient = fixtures.map((f) => ({
+    ...f,
+    fieldReferee: f.fieldReferee ? { id: f.fieldReferee.id, user: { id: f.fieldReferee.id, name: refName(f.fieldReferee) } } : null,
+    scorer: f.scorer ? { id: f.scorer.id, user: { id: f.scorer.id, name: refName(f.scorer) } } : null,
+  }));
+
   return (
     <div>
       <h1 className="text-2xl font-black text-navy mb-6">Fixtures</h1>
       <FixturesClient
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      initialFixtures={fixtures as any}
-        referees={referees}
+      initialFixtures={fixturesForClient as any}
+        referees={refereesForClient}
         pitches={pitches}
         competitions={competitions}
         selectedCompId={comp ?? ""}

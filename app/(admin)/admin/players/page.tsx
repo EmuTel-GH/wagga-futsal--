@@ -9,12 +9,21 @@ type Player = {
   dateOfBirth: string;
   gender: string;
   playFootballId: string | null;
+  registeredAgeGroup: string | null;
+};
+
+type ImportSummary = {
+  players: number;
+  officials: number;
+  referees: number;
+  skipped: number;
+  errors: string[];
 };
 
 export default function PlayersAdmin() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -55,8 +64,19 @@ export default function PlayersAdmin() {
       </div>
 
       {importResult && (
-        <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-lg mb-4">
-          Imported {importResult.imported} players, skipped {importResult.skipped} duplicates.
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-lg mb-4">
+          <p className="font-semibold">
+            Imported {importResult.players} players, {importResult.officials} coaches/managers,{" "}
+            {importResult.referees} referees{importResult.skipped > 0 ? ` · ${importResult.skipped} skipped` : ""}.
+          </p>
+          {importResult.errors?.length > 0 && (
+            <ul className="mt-2 space-y-0.5 text-amber-800 list-disc list-inside">
+              {importResult.errors.slice(0, 10).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+              {importResult.errors.length > 10 && <li>…and {importResult.errors.length - 10} more</li>}
+            </ul>
+          )}
         </div>
       )}
 
@@ -73,8 +93,9 @@ export default function PlayersAdmin() {
             <tr>
               <th className="px-4 py-3 text-left font-semibold">Name</th>
               <th className="px-4 py-3 text-left font-semibold">DOB</th>
+              <th className="px-4 py-3 text-left font-semibold">Age Group</th>
               <th className="px-4 py-3 text-left font-semibold">Gender</th>
-              <th className="px-4 py-3 text-left font-semibold">PlayFootball ID</th>
+              <th className="px-4 py-3 text-left font-semibold">FFA Number</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -82,6 +103,11 @@ export default function PlayersAdmin() {
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-semibold">{p.firstName} {p.lastName}</td>
                 <td className="px-4 py-2.5 text-muted">{new Date(p.dateOfBirth).toLocaleDateString("en-AU")}</td>
+                <td className="px-4 py-2.5">
+                  <span className="text-xs font-bold bg-navy/10 text-navy px-2 py-0.5 rounded-full">
+                    {p.registeredAgeGroup ?? "—"}
+                  </span>
+                </td>
                 <td className="px-4 py-2.5 text-muted capitalize">{p.gender.toLowerCase()}</td>
                 <td className="px-4 py-2.5 text-muted font-mono text-xs">{p.playFootballId ?? "—"}</td>
               </tr>

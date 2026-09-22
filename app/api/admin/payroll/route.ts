@@ -42,8 +42,8 @@ export async function GET(req: Request) {
     const totalCents = fieldRefGames * fieldRefRate + scorerGames * scorerRate;
     return {
       refereeId: ref.id,
-      name: ref.user.name,
-      email: ref.user.email,
+      name: ref.user?.name ?? [ref.firstName, ref.lastName].filter(Boolean).join(" ") ?? "Unnamed referee",
+      email: ref.user?.email ?? null,
       bsb: ref.bsb,
       accountNumber: ref.accountNumber,
       accountName: ref.accountName,

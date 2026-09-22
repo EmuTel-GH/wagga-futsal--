@@ -38,31 +38,83 @@ enum UserRole {
 // ─── People ──────────────────────────────────────────────────────────────────
 
 model Player {
-  id             String   @id @default(cuid())
-  firstName      String
-  lastName       String
-  dateOfBirth    DateTime
-  gender         Gender
-  playFootballId String?  @unique
-  createdAt      DateTime @default(now())
+  id                 String    @id @default(cuid())
+  firstName          String
+  lastName           String
+  dateOfBirth        DateTime
+  gender             Gender
+  playFootballId     String?   @unique
+  // The age group the player registered in (from PlayFootball import; rule 7.2).
+  // Eligibility to play in a competition is derived from this — see lib/eligibility.ts.
+  registeredAgeGroup AgeGroup?
+  createdAt          DateTime  @default(now())
 
-  teamPlayers TeamPlayer[]
-  matchEvents MatchEvent[]
-  suspensions Suspension[]
+  teamPlayers   TeamPlayer[]
+  matchEvents   MatchEvent[]
+  suspensions   Suspension[]
+  dispensations Dispensation[]
 }
 
 model Referee {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  phone         String?
-  bsb           String?
-  accountNumber String?
-  accountName   String?
-  createdAt     DateTime @default(now())
+  id             String   @id @default(cuid())
+  // Optional: referees imported from PlayFootball exist before they have a login.
+  // Link a User later to give scoring-portal access.
+  userId         String?  @unique
+  firstName      String?
+  lastName       String?
+  playFootballId String?  @unique
+  phone          String?
+  bsb            String?
+  accountNumber  String?
+  accountName    String?
+  createdAt      DateTime @default(now())
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   fieldRefGames   Fixture[] @relation("FieldReferee")
   scorerGames     Fixture[] @relation("Scorer")
+}
+
+// Coach or manager registered with a team (rules 1.3–1.4: every team needs an
+// over-18 registered official in the technical area).
+model TeamOfficial {
+  id             String       @id @default(cuid())
+  firstName      String
+  lastName       String
+  role           OfficialRole
+  playFootballId String?      @unique
+  teamId         String?
+  createdAt      DateTime     @default(now())
+
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+}
+
+enum OfficialRole {
+  COACH
+  MANAGER
+}
+
+// Admin-recorded approval letting a player play outside their registered age group.
+// PLAY_UP: rule 7.2 — higher group, min age met + parent/guardian consent form.
+// PLAY_DOWN: rule 7.5 — female players in mixed/open comps, one group down max.
+// Approved by the competition administrators (e.g. Sam / Amanda).
+model Dispensation {
+  id            String           @id @default(cuid())
+  playerId      String
+  competitionId String
+  type          DispensationType
+  approvedBy    String
+  note          String?
+  createdAt     DateTime         @default(now())
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, competitionId])
+}
+
+enum DispensationType {
+  PLAY_UP
+  PLAY_DOWN
 }
 
 model PayRate {
@@ -118,6 +170,7 @@ model Competition {
   teams     CompetitionTeam[]
   fixtures  Fixture[]
   suspensions Suspension[]
+  dispensations Dispensation[]
 }
 
 model CompetitionTimeSlot {
@@ -140,6 +193,7 @@ model Team {
   createdAt    DateTime @default(now())
 
   players      TeamPlayer[]
+  officials    TeamOfficial[]
   competitions CompetitionTeam[]
   homeFixtures Fixture[]   @relation("HomeTeam")
   awayFixtures Fixture[]   @relation("AwayTeam")

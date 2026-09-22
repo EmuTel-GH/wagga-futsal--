@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { checkEligibility } from "@/lib/eligibility";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,6 +17,34 @@ export async function POST(req: Request, { params }: Params) {
 
   if (!playerId) {
     return NextResponse.json({ error: "playerId is required" }, { status: 400 });
+  }
+
+  // Age eligibility (rules 7.2/7.4/7.5) against every competition this team is in.
+  const [player, competitionTeams] = await Promise.all([
+    prisma.player.findUnique({ where: { id: playerId }, include: { dispensations: true } }),
+    prisma.competitionTeam.findMany({ where: { teamId }, include: { competition: true } }),
+  ]);
+  if (!player) return NextResponse.json({ error: "Player not found" }, { status: 404 });
+
+  for (const ct of competitionTeams) {
+    const dispensation = player.dispensations.find((d) => d.competitionId === ct.competitionId) ?? null;
+    const result = checkEligibility({
+      dateOfBirth: player.dateOfBirth,
+      gender: player.gender,
+      registeredAgeGroup: player.registeredAgeGroup,
+      competition: ct.competition,
+      dispensation,
+    });
+    if (!result.eligible) {
+      return NextResponse.json(
+        {
+          error: `${player.firstName} ${player.lastName} is not eligible for ${ct.competition.name}: ${result.reason}`,
+          requiresDispensation: result.requires,
+          competitionId: ct.competitionId,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   const teamPlayer = await prisma.teamPlayer.create({

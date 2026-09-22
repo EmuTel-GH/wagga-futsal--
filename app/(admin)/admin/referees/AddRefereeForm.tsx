@@ -8,7 +8,9 @@ type Referee = {
   bsb: string | null;
   accountNumber: string | null;
   accountName: string | null;
-  user: { id: string; name: string; email: string; role: string };
+  firstName?: string | null;
+  lastName?: string | null;
+  user: { id: string; name: string; email: string; role: string } | null;
   _count: { fieldRefGames: number };
 };
 
