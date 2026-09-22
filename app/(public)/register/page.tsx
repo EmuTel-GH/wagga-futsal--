@@ -4,7 +4,7 @@ import Image from "next/image";
 export const metadata: Metadata = { title: "Register — Summer 2026" };
 
 const REGISTER_URL =
-  "https://playfootball.com.au/football-finder?st=location&lat=-35.1053&lng=147.3605&suburb=Wagga+Wagga&state_code=NSW&postcode=2650&clubId=75505";
+  "https://registration.playfootball.com.au/participant/find-products?referrer_entity_id=75505&page=1";
 
 const KICKOFF = [
   {

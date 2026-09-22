@@ -68,7 +68,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               Player registration is managed through PlayFootball (Football NSW).
             </p>
             <a
-              href="https://playfootball.com.au/football-finder?st=location&lat=-35.1053&lng=147.3605&suburb=Wagga+Wagga&state_code=NSW&postcode=2650&clubId=75505"
+              href="https://registration.playfootball.com.au/participant/find-products?referrer_entity_id=75505&page=1"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block bg-brand hover:bg-brand-dark text-white text-sm px-4 py-2 rounded font-semibold transition-colors"
