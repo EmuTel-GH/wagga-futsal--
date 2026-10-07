@@ -1,3 +1,5 @@
+import { breakFor, type BreakRange } from "./breakDates";
+
 interface DrawTeam {
   id: string;
 }
@@ -55,14 +57,19 @@ export function generateRoundRobin(teams: DrawTeam[], cycles = 2): Array<[string
   return rounds;
 }
 
-// Given rounds and available time slots, produce scheduled fixtures
+// Given rounds and available time slots, produce scheduled fixtures.
+// Rounds go out one per week from startDate. A round is placed as a whole: if
+// any of its games would land in a break (holiday, Christmas...) the entire
+// round moves to the next week, so a round is never split across a break.
 export function scheduleFixtures(
   competitionId: string,
   rounds: Array<[string, string][]>,
   slots: DrawSlot[],
-  startDate: Date
-): Omit<Fixture, never>[] {
+  startDate: Date,
+  breaks: BreakRange[] = []
+): { fixtures: Fixture[]; skipped: { date: Date; breakName: string }[] } {
   const fixtures: Fixture[] = [];
+  const skipped: { date: Date; breakName: string }[] = [];
   let slotIndex = 0;
   let currentDate = new Date(startDate);
 
@@ -75,36 +82,46 @@ export function scheduleFixtures(
     return d;
   };
 
-  for (let roundIdx = 0; roundIdx < rounds.length; roundIdx++) {
-    const pairs = rounds[roundIdx];
-    let pairIdx = 0;
-
-    while (pairIdx < pairs.length) {
-      const slot = slots[slotIndex % slots.length];
-      const gameDate = advanceToDay(new Date(currentDate), slot.dayOfWeek);
+  // Where each game of a round would go if the round started this week.
+  const plan = (pairs: [string, string][], from: Date) =>
+    pairs.map((pair, i) => {
+      const slot = slots[(slotIndex + i) % slots.length];
+      const gameDate = advanceToDay(new Date(from), slot.dayOfWeek);
       const [hour, minute] = slot.startTime.split(":").map(Number);
       gameDate.setHours(hour, minute, 0, 0);
+      return { pair, slot, gameDate };
+    });
 
+  for (let roundIdx = 0; roundIdx < rounds.length; roundIdx++) {
+    const pairs = rounds[roundIdx];
+    if (pairs.length === 0) continue;
+
+    let games = plan(pairs, currentDate);
+    for (let guard = 0; guard < 104; guard++) {
+      const hit = games.map((g) => breakFor(g.gameDate, breaks)).find(Boolean);
+      if (!hit) break;
+      skipped.push({ date: games[0].gameDate, breakName: hit.name });
+      currentDate.setDate(currentDate.getDate() + 7);
+      games = plan(pairs, currentDate);
+    }
+
+    for (const { pair, slot, gameDate } of games) {
       fixtures.push({
-        homeTeamId: pairs[pairIdx][0],
-        awayTeamId: pairs[pairIdx][1],
+        homeTeamId: pair[0],
+        awayTeamId: pair[1],
         round: roundIdx + 1,
         pitchId: slot.pitchId,
-        scheduledAt: new Date(gameDate),
+        scheduledAt: gameDate,
       });
-
-      pairIdx++;
-      slotIndex++;
-
-      // Move to next week after filling all slots in a round
-      if (pairIdx >= pairs.length) {
-        currentDate = new Date(gameDate);
-        currentDate.setDate(currentDate.getDate() + 7);
-      }
     }
+    slotIndex += pairs.length;
+
+    // Next round: a week after this round's last game.
+    currentDate = new Date(games[games.length - 1].gameDate);
+    currentDate.setDate(currentDate.getDate() + 7);
   }
 
-  return fixtures;
+  return { fixtures, skipped };
 }
 
 // Generate finals fixtures from top 4 teams

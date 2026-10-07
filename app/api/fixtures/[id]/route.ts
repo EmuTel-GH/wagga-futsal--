@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const fixture = await prisma.fixture.findUnique({
-    where: { id },
+  // Draft fixtures aren't public yet.
+  const fixture = await prisma.fixture.findFirst({
+    where: { id, status: { not: "DRAFT" } },
     include: {
       homeTeam: true,
       awayTeam: true,

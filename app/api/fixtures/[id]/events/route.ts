@@ -23,6 +23,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const fixture = await prisma.fixture.findUnique({ where: { id: fixtureId } });
   if (!fixture) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
+  if (fixture.status === "DRAFT") {
+    return NextResponse.json({ error: "This fixture hasn't been published yet" }, { status: 409 });
+  }
 
   // Create the event
   const event = await prisma.matchEvent.create({

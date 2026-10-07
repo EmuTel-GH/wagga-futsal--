@@ -5,7 +5,7 @@ import { flaggedExpected } from "@/lib/squadReview";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const [players, teams, competitions, liveFixtures, upcomingFixtures, pendingBookings, squadReview] =
+  const [players, teams, competitions, liveFixtures, upcomingFixtures, pendingBookings, squadReview, draftsByComp] =
     await Promise.all([
       prisma.player.count(),
       prisma.team.count(),
@@ -14,7 +14,9 @@ export default async function AdminDashboard() {
       prisma.fixture.count({ where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } } }),
       prisma.sessionBooking.count({ where: { status: "CONFIRMED" } }),
       flaggedExpected(),
+      prisma.fixture.groupBy({ by: ["competitionId"], where: { status: "DRAFT" }, _count: true }),
     ]);
+  const draftFixtures = draftsByComp.reduce((n, g) => n + g._count, 0);
 
   const pendingTeams = squadReview.filter((t) => t.status === "PENDING").length;
   const flaggedPlayers = squadReview.reduce((n, t) => n + t.flagged.length, 0);
@@ -32,9 +34,9 @@ export default async function AdminDashboard() {
     <div>
       <h1 className="text-2xl font-black text-navy mb-6">Dashboard</h1>
 
-      {(pendingTeams > 0 || flaggedPlayers > 0) && (
+      {(pendingTeams > 0 || flaggedPlayers > 0 || draftFixtures > 0) && (
         <Link
-          href="/admin/teams"
+          href={pendingTeams > 0 || flaggedPlayers > 0 ? "/admin/teams" : "/admin/fixtures"}
           className="block mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 hover:border-amber-500 transition-colors"
         >
           <p className="font-bold text-amber-800 text-sm">Needs review</p>
@@ -42,6 +44,8 @@ export default async function AdminDashboard() {
             {[
               pendingTeams > 0 && `${pendingTeams} team nomination${pendingTeams === 1 ? "" : "s"} awaiting approval`,
               flaggedPlayers > 0 && `${flaggedPlayers} nominated player${flaggedPlayers === 1 ? "" : "s"} ineligible — authorise or reject`,
+              draftFixtures > 0 &&
+                `${draftFixtures} draft fixture${draftFixtures === 1 ? "" : "s"} in ${draftsByComp.length} competition${draftsByComp.length === 1 ? "" : "s"} not yet published`,
             ]
               .filter(Boolean)
               .join(" · ")}
