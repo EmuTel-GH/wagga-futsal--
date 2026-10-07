@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -36,6 +38,14 @@ export async function PATCH(req: Request, { params }: Params) {
       fieldReferee: { include: { user: { select: { id: true, name: true } } } },
       scorer: { include: { user: { select: { id: true, name: true } } } },
     },
+  });
+
+  await audit(session, {
+    action: "fixture.update",
+    summary: `Updated fixture ${fixture.homeTeam.name} v ${fixture.awayTeam.name} (${Object.keys(data).join(", ")})`,
+    entityType: "Fixture",
+    entityId: id,
+    details: data,
   });
 
   return NextResponse.json(fixture);

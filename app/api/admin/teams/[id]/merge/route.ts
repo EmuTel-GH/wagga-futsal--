@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -9,8 +10,9 @@ type Params = { params: Promise<{ id: string }> };
 // expected players and any roster/officials move across (deduped), then the
 // source team is deleted.
 export async function POST(req: Request, { params }: Params) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -61,7 +63,14 @@ export async function POST(req: Request, { params }: Params) {
     );
     if (toMove.length > 0) {
       await tx.expectedPlayer.createMany({
-        data: toMove.map((e) => ({ teamId: target.id, firstName: e.firstName, lastName: e.lastName })),
+        data: toMove.map((e) => ({
+          teamId: target.id,
+          firstName: e.firstName,
+          lastName: e.lastName,
+          rejectedAt: e.rejectedAt,
+          rejectedBy: e.rejectedBy,
+          rejectReason: e.rejectReason,
+        })),
       });
     }
 
@@ -84,6 +93,14 @@ export async function POST(req: Request, { params }: Params) {
 
     // Deleting the source cascades its roster, expected list and comp link.
     await tx.team.delete({ where: { id: source.id } });
+  });
+
+  await audit(session, {
+    action: "team.merge",
+    summary: `Merged nomination ${source.name} into ${target.name}`,
+    entityType: "Team",
+    entityId: target.id,
+    details: { sourceTeamId: source.id, sourceName: source.name, targetTeamId: target.id },
   });
 
   return NextResponse.json({ ok: true, targetTeamId: target.id });

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { flaggedExpected } from "@/lib/squadReview";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const [players, teams, competitions, liveFixtures, upcomingFixtures, pendingBookings] =
+  const [players, teams, competitions, liveFixtures, upcomingFixtures, pendingBookings, squadReview] =
     await Promise.all([
       prisma.player.count(),
       prisma.team.count(),
@@ -12,7 +13,11 @@ export default async function AdminDashboard() {
       prisma.fixture.count({ where: { status: "LIVE" } }),
       prisma.fixture.count({ where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } } }),
       prisma.sessionBooking.count({ where: { status: "CONFIRMED" } }),
+      flaggedExpected(),
     ]);
+
+  const pendingTeams = squadReview.filter((t) => t.status === "PENDING").length;
+  const flaggedPlayers = squadReview.reduce((n, t) => n + t.flagged.length, 0);
 
   const stats = [
     { label: "Players", value: players, href: "/admin/players" },
@@ -26,6 +31,23 @@ export default async function AdminDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-black text-navy mb-6">Dashboard</h1>
+
+      {(pendingTeams > 0 || flaggedPlayers > 0) && (
+        <Link
+          href="/admin/teams"
+          className="block mb-6 bg-amber-50 border border-amber-300 rounded-xl p-4 hover:border-amber-500 transition-colors"
+        >
+          <p className="font-bold text-amber-800 text-sm">Needs review</p>
+          <p className="text-xs text-amber-800 mt-1">
+            {[
+              pendingTeams > 0 && `${pendingTeams} team nomination${pendingTeams === 1 ? "" : "s"} awaiting approval`,
+              flaggedPlayers > 0 && `${flaggedPlayers} nominated player${flaggedPlayers === 1 ? "" : "s"} ineligible — authorise or reject`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-10">
         {stats.map((s) => (

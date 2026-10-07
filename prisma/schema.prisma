@@ -9,19 +9,25 @@ datasource db {
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String       @id @default(cuid())
+  id              String       @id @default(cuid())
   // Login identifier — an email address, or a firstname.lastname username
   // for referees created without one.
-  email        String       @unique
-  passwordHash String
+  email           String       @unique
+  passwordHash    String
   // True until the person sets their own password on first sign-in.
-  mustSetPassword Boolean   @default(false)
-  name         String
-  role         UserRole     @default(REFEREE)
-  createdAt    DateTime     @default(now())
+  mustSetPassword Boolean      @default(false)
+  name            String
+  role            UserRole     @default(REFEREE)
+  // Extra capabilities on top of the role (only meaningful for ADMIN).
+  permissions     Permission[] @default([])
+  // Deactivated accounts cannot sign in; their sessions are revoked.
+  active          Boolean      @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime     @default(now())
 
-  referee      Referee?
-  sessions     AuthSession[]
+  referee   Referee?
+  sessions  AuthSession[]
+  auditLogs AuditLog[]
 }
 
 model AuthSession {
@@ -31,12 +37,47 @@ model AuthSession {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum UserRole {
   ADMIN
   REFEREE
+}
+
+enum Permission {
+  // Add, edit, deactivate users and set their permissions.
+  MANAGE_USERS
+  // Proceed past eligibility rule blocks (recorded as a Dispensation + audited).
+  OVERRIDE_RULES
+  // Read the audit log.
+  VIEW_AUDIT
+}
+
+// Who did what, and when. Written for every change made by a signed-in user
+// (admins and referees) plus sign-in/sign-out events. actorEmail/actorName are
+// snapshots so entries still read correctly after a user is renamed or deleted.
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  userId     String?
+  actorEmail String?
+  actorName  String?
+  // Dotted verb, e.g. "team.player.add", "auth.login".
+  action     String
+  entityType String?
+  entityId   String?
+  // Human-readable one-liner shown in the admin UI.
+  summary    String
+  // Request input / extra context. Secrets and bank details are redacted.
+  details    Json?
+  ip         String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([entityType, entityId])
 }
 
 // ─── People ──────────────────────────────────────────────────────────────────
@@ -73,9 +114,9 @@ model Referee {
   accountName    String?
   createdAt      DateTime @default(now())
 
-  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fieldRefGames   Fixture[] @relation("FieldReferee")
-  scorerGames     Fixture[] @relation("Scorer")
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fieldRefGames Fixture[] @relation("FieldReferee")
+  scorerGames   Fixture[] @relation("Scorer")
 }
 
 // Coach or manager registered with a team (rules 1.3–1.4: every team needs an
@@ -100,6 +141,8 @@ enum OfficialRole {
 // Admin-recorded approval letting a player play outside their registered age group.
 // PLAY_UP: rule 7.2 — higher group, min age met + parent/guardian consent form.
 // PLAY_DOWN: rule 7.5 — female players in mixed/open comps, one group down max.
+// OVERRIDE: an administrator with OVERRIDE_RULES let the placement through even
+// though no rule allows it (e.g. a strong U10 player moved up to U12).
 // Approved by the competition administrators (e.g. Sam / Amanda).
 model Dispensation {
   id            String           @id @default(cuid())
@@ -119,23 +162,24 @@ model Dispensation {
 enum DispensationType {
   PLAY_UP
   PLAY_DOWN
+  OVERRIDE
 }
 
 model PayRate {
-  id            String   @id @default(cuid())
+  id                  String   @id @default(cuid())
   // Junior tier: U10–U14 games
-  fieldRefCents Int      @default(5000)
-  scorerCents   Int      @default(2500)
+  fieldRefCents       Int      @default(5000)
+  scorerCents         Int      @default(2500)
   // Senior tier: U16 & Opens games
-  fieldRefSeniorCents Int @default(5000)
-  scorerSeniorCents   Int @default(2500)
-  orgBsb        String?
-  orgAccount    String?
-  orgName       String?
-  orgBank       String?
-  orgApcaId     String?
-  updatedAt     DateTime @updatedAt
-  createdAt     DateTime @default(now())
+  fieldRefSeniorCents Int      @default(5000)
+  scorerSeniorCents   Int      @default(2500)
+  orgBsb              String?
+  orgAccount          String?
+  orgName             String?
+  orgBank             String?
+  orgApcaId           String?
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
 }
 
 enum Gender {
@@ -155,10 +199,10 @@ model Venue {
 }
 
 model Pitch {
-  id       String   @id @default(cuid())
+  id       String                @id @default(cuid())
   name     String
   venueId  String
-  venue    Venue    @relation(fields: [venueId], references: [id])
+  venue    Venue                 @relation(fields: [venueId], references: [id])
   slots    CompetitionTimeSlot[]
   fixtures Fixture[]
   sessions FutsalSession[]
@@ -175,27 +219,27 @@ model Competition {
   status    CompetitionStatus @default(REGISTRATION)
   createdAt DateTime          @default(now())
 
-  timeSlots CompetitionTimeSlot[]
-  teams     CompetitionTeam[]
-  fixtures  Fixture[]
-  suspensions Suspension[]
+  timeSlots     CompetitionTimeSlot[]
+  teams         CompetitionTeam[]
+  fixtures      Fixture[]
+  suspensions   Suspension[]
   dispensations Dispensation[]
 }
 
 model CompetitionTimeSlot {
-  id            String      @id @default(cuid())
+  id            String @id @default(cuid())
   competitionId String
   pitchId       String
-  dayOfWeek     Int         // 0=Sun … 6=Sat
-  startTime     String      // "18:00"
-  durationMins  Int         @default(40)
+  dayOfWeek     Int // 0=Sun … 6=Sat
+  startTime     String // "18:00"
+  durationMins  Int    @default(40)
 
-  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
-  pitch         Pitch       @relation(fields: [pitchId], references: [id])
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  pitch       Pitch       @relation(fields: [pitchId], references: [id])
 }
 
 model Team {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
   contactName  String?
   contactEmail String?
@@ -208,14 +252,14 @@ model Team {
   // them into an existing team). Pending teams are hidden from the public site
   // and excluded from draw generation. Admin-created teams are APPROVED.
   status       TeamStatus @default(APPROVED)
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @default(now())
 
   players      TeamPlayer[]
   officials    TeamOfficial[]
   expected     ExpectedPlayer[]
   competitions CompetitionTeam[]
-  homeFixtures Fixture[]   @relation("HomeTeam")
-  awayFixtures Fixture[]   @relation("AwayTeam")
+  homeFixtures Fixture[]         @relation("HomeTeam")
+  awayFixtures Fixture[]         @relation("AwayTeam")
   events       MatchEvent[]
 }
 
@@ -228,26 +272,31 @@ enum TeamStatus {
 // Not necessarily registered on PlayFootball yet — the admin UI matches these
 // against actual registrations by name and shows who is still outstanding.
 model ExpectedPlayer {
-  id        String   @id @default(cuid())
-  teamId    String
-  firstName String
-  lastName  String
-  createdAt DateTime @default(now())
+  id           String    @id @default(cuid())
+  teamId       String
+  firstName    String
+  lastName     String
+  // Set when an admin rejects this name (e.g. ineligible and not authorised).
+  // Rejected names stay on the list so the original nomination is preserved.
+  rejectedAt   DateTime?
+  rejectedBy   String?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model TeamPlayer {
-  id           String   @id @default(cuid())
-  teamId       String
-  playerId     String
-  jerseyNumber Int?
+  id                String   @id @default(cuid())
+  teamId            String
+  playerId          String
+  jerseyNumber      Int?
   // A player's first team is their primary (covered by their registration).
   // Each additional team costs the $135 additional-team fee, and must be in a
   // different competition (rule 22.1 — no two teams in the same comp).
-  isPrimary          Boolean  @default(true)
-  additionalFeePaid  Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  isPrimary         Boolean  @default(true)
+  additionalFeePaid Boolean  @default(false)
+  createdAt         DateTime @default(now())
 
   team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -317,12 +366,12 @@ model Fixture {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  competition  Competition @relation(fields: [competitionId], references: [id])
-  homeTeam     Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam     Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  pitch        Pitch?      @relation(fields: [pitchId], references: [id])
-  fieldReferee Referee?    @relation("FieldReferee", fields: [fieldRefereeId], references: [id])
-  scorer       Referee?    @relation("Scorer", fields: [scorerId], references: [id])
+  competition  Competition  @relation(fields: [competitionId], references: [id])
+  homeTeam     Team         @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam     Team         @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  pitch        Pitch?       @relation(fields: [pitchId], references: [id])
+  fieldReferee Referee?     @relation("FieldReferee", fields: [fieldRefereeId], references: [id])
+  scorer       Referee?     @relation("Scorer", fields: [scorerId], references: [id])
   events       MatchEvent[]
 }
 
@@ -338,9 +387,9 @@ model MatchEvent {
   jerseyNumber Int?
   createdAt    DateTime  @default(now())
 
-  fixture    Fixture  @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
-  team       Team     @relation(fields: [teamId], references: [id])
-  player     Player?  @relation(fields: [playerId], references: [id])
+  fixture Fixture @relation(fields: [fixtureId], references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [teamId], references: [id])
+  player  Player? @relation(fields: [playerId], references: [id])
 
   @@index([fixtureId])
   @@index([createdAt])

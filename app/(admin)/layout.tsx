@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, hasPermission, type AuthSession } from "@/lib/auth";
 import LogoutButton from "@/components/referee/LogoutButton";
 
 const NAV = [
@@ -17,12 +17,20 @@ const NAV = [
   { href: "/admin/rules", label: "Rules" },
 ];
 
+// Shown only to administrators holding the matching permission.
+const RESTRICTED_NAV = [
+  { href: "/admin/users", label: "Users", permission: "MANAGE_USERS" },
+  { href: "/admin/audit", label: "Audit log", permission: "VIEW_AUDIT" },
+] as const;
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  let session: AuthSession;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     redirect("/referee/login");
   }
+  const nav = [...NAV, ...RESTRICTED_NAV.filter((n) => hasPermission(session.user, n.permission))];
 
   return (
     <div className="min-h-screen flex">
@@ -36,7 +44,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-0.5">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <Link
               key={n.href}
               href={n.href}
@@ -46,7 +54,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
           ))}
         </nav>
-        <div className="px-4 py-4 border-t border-white/10">
+        <div className="px-4 py-4 border-t border-white/10 space-y-2">
+          <Link href="/admin/account" className="block text-xs text-white/70 hover:text-white truncate" title="My account">
+            {session.user.name}
+          </Link>
           <LogoutButton />
         </div>
       </aside>

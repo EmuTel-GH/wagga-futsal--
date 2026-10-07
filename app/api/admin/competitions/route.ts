@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 export async function GET() {
   try {
@@ -22,8 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -47,6 +49,14 @@ export async function POST(req: Request) {
       teams: { include: { team: true } },
       _count: { select: { fixtures: true } },
     },
+  });
+
+  await audit(session, {
+    action: "competition.create",
+    summary: `Created competition ${competition.name} (${competition.season})`,
+    entityType: "Competition",
+    entityId: competition.id,
+    details: { name, season, ageGroup, gender, status: competition.status },
   });
 
   return NextResponse.json(competition, { status: 201 });

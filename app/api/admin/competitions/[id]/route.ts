@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -30,19 +32,35 @@ export async function PATCH(req: Request, { params }: Params) {
     },
   });
 
+  await audit(session, {
+    action: "competition.update",
+    summary: `Updated competition ${competition.name} (${Object.keys(data).join(", ")})`,
+    entityType: "Competition",
+    entityId: id,
+    details: data,
+  });
+
   return NextResponse.json(competition);
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
 
-  await prisma.competition.delete({ where: { id } });
+  const competition = await prisma.competition.delete({ where: { id } });
+  await audit(session, {
+    action: "competition.delete",
+    summary: `Deleted competition ${competition.name} (${competition.season})`,
+    entityType: "Competition",
+    entityId: id,
+    details: competition,
+  });
 
   return NextResponse.json({ ok: true });
 }

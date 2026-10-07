@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import { getStandings } from "@/lib/standings";
 import { generateFinals } from "@/lib/draw";
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -43,6 +45,14 @@ export async function POST(req: Request) {
   await prisma.competition.update({
     where: { id: competitionId },
     data: { status: "FINALS" },
+  });
+
+  await audit(session, {
+    action: "competition.finals.generate",
+    summary: `Started finals: ${standings[0].teamName} v ${standings[3].teamName}, ${standings[1].teamName} v ${standings[2].teamName}`,
+    entityType: "Competition",
+    entityId: competitionId,
+    details: { semifinalDate, pitchId, created: definite.length },
   });
 
   return NextResponse.json({

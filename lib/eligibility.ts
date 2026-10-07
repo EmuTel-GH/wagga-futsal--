@@ -12,6 +12,8 @@ import type { AgeGroup, DispensationType, Gender } from "@prisma/client";
  *   - PLAY DOWN (rule 7.5): FEMALE players in MIXED/OPEN competitions may play
  *     one group below their registered group, with approval — recorded as a
  *     Dispensation (approved by the competition administrators).
+ *   - OVERRIDE: an administrator with the OVERRIDE_RULES permission let the
+ *     placement through anyway (any rule), with a recorded reason.
  */
 
 /**
@@ -89,7 +91,7 @@ export function groupIndex(g: AgeGroup): number {
 }
 
 export type EligibilityResult =
-  | { eligible: true; via: "REGISTERED" | "DISPENSATION" }
+  | { eligible: true; via: "REGISTERED" | "DISPENSATION" | "OVERRIDE" }
   | { eligible: false; requires: DispensationType | null; reason: string };
 
 /**
@@ -105,6 +107,10 @@ export function checkEligibility(opts: {
 }): EligibilityResult {
   const { dateOfBirth: dob, gender, competition: comp, dispensation } = opts;
   const reg = opts.registeredAgeGroup ?? defaultRegisteredGroup(dob);
+
+  // An administrator override clears every rule below — it is the escape hatch
+  // for placements the rules block but the club judges reasonable.
+  if (dispensation?.type === "OVERRIDE") return { eligible: true, via: "OVERRIDE" };
 
   // Rule 7.4 — male players may not play in female-only competitions. No override.
   if (comp.gender === "FEMALE" && gender === "MALE") {
@@ -154,4 +160,70 @@ export function checkEligibility(opts: {
     requires: "PLAY_DOWN",
     reason: `Registered ${reg} — playing down to ${comp.ageGroup} needs competition administrator approval (rule 7.5).`,
   };
+}
+
+/**
+ * The dispensation type an administrator approval should be recorded as for a
+ * blocked placement: the rule's own approval path where one exists (play-up
+ * consent / play-down approval), otherwise a plain OVERRIDE.
+ */
+export function approvalTypeFor(result: EligibilityResult): DispensationType {
+  return !result.eligible && result.requires ? result.requires : "OVERRIDE";
+}
+
+export type ReviewPlayer = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: Date | string;
+  gender: Gender;
+  registeredAgeGroup: AgeGroup | null;
+};
+export type ReviewDispensation = { playerId: string; competitionId: string; type: DispensationType };
+export type ReviewCompetition = { id: string; ageGroup: AgeGroup; gender: Gender; name?: string };
+export type ReviewExpected = { id: string; firstName: string; lastName: string; rejectedAt?: Date | string | null };
+
+export type ExpectedReview =
+  | { state: "UNREGISTERED" }
+  | { state: "REJECTED" }
+  | { state: "IN_TEAM"; player: ReviewPlayer }
+  | { state: "ELIGIBLE"; player: ReviewPlayer; via: "REGISTERED" | "DISPENSATION" | "OVERRIDE" | "NO_COMPETITION" }
+  | { state: "INELIGIBLE"; player: ReviewPlayer; reason: string; requires: DispensationType | null };
+
+/** Match an expected-squad name against registered players (case-insensitive, exact). */
+export function matchExpected(ex: ReviewExpected, players: ReviewPlayer[]) {
+  const first = ex.firstName.trim().toLowerCase();
+  const last = ex.lastName.trim().toLowerCase();
+  return players.find((p) => p.firstName.trim().toLowerCase() === first && p.lastName.trim().toLowerCase() === last);
+}
+
+/**
+ * Review one name from a team's expected squad (the team registration form):
+ * is the player registered, already in the team, and eligible for the team's
+ * competition? INELIGIBLE entries need an administrator to authorise or reject.
+ */
+export function reviewExpected(opts: {
+  expected: ReviewExpected;
+  players: ReviewPlayer[];
+  rosterPlayerIds: string[];
+  competition: ReviewCompetition | null;
+  dispensations: ReviewDispensation[];
+}): ExpectedReview {
+  const { expected, players, rosterPlayerIds, competition, dispensations } = opts;
+  if (expected.rejectedAt) return { state: "REJECTED" };
+  const player = matchExpected(expected, players);
+  if (!player) return { state: "UNREGISTERED" };
+  if (rosterPlayerIds.includes(player.id)) return { state: "IN_TEAM", player };
+  if (!competition) return { state: "ELIGIBLE", player, via: "NO_COMPETITION" };
+  const dispensation = dispensations.find((d) => d.playerId === player.id && d.competitionId === competition.id) ?? null;
+  const result = checkEligibility({
+    dateOfBirth: new Date(player.dateOfBirth),
+    gender: player.gender,
+    registeredAgeGroup: player.registeredAgeGroup,
+    competition,
+    dispensation,
+  });
+  return result.eligible
+    ? { state: "ELIGIBLE", player, via: result.via }
+    : { state: "INELIGIBLE", player, reason: result.reason, requires: result.requires };
 }
