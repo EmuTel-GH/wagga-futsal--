@@ -35,8 +35,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-56 bg-navy text-white flex flex-col shrink-0">
+      {/* Sidebar: pinned to the viewport so the nav and account/logout stay
+          visible however long the page is; the nav scrolls on its own if needed. */}
+      <aside className="w-56 bg-navy text-white flex flex-col shrink-0 sticky top-0 h-screen">
         <div className="px-4 py-5 border-b border-white/10 flex items-center gap-3">
           <Image src="/logo.png" alt="Wagga Futsal" width={36} height={36} className="rounded shrink-0" />
           <div>

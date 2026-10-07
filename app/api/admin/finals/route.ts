@@ -38,7 +38,8 @@ export async function POST(req: Request) {
   await prisma.fixture.createMany({
     data: definite.map((f) => ({
       ...f,
-      status: "SCHEDULED",
+      // Like the draw, finals start as drafts until an admin publishes them.
+      status: "DRAFT",
     })),
   });
 

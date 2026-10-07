@@ -20,6 +20,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
+  const current = await prisma.fixture.findUnique({ where: { id }, select: { status: true } });
+  if (!current) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
+  if (current.status === "DRAFT") {
+    return NextResponse.json({ error: "This fixture hasn't been published yet" }, { status: 409 });
+  }
+
   const fixture = await prisma.fixture.update({
     where: { id },
     data: { status: status as FixtureStatus },

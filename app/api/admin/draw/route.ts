@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { generateRoundRobin, scheduleFixtures } from "@/lib/draw";
+import { breaksForCompetition, sydneyDateKey } from "@/lib/breaks";
 
 export async function POST(req: Request) {
   let session;
@@ -38,9 +39,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No time slots configured for this competition" }, { status: 400 });
   }
 
-  // Clear existing scheduled fixtures for this competition
+  // Replace any unplayed regular-season fixtures (draft or published).
   await prisma.fixture.deleteMany({
-    where: { competitionId, phase: "REGULAR", status: "SCHEDULED" },
+    where: { competitionId, phase: "REGULAR", status: { in: ["DRAFT", "SCHEDULED"] } },
   });
 
   const teams = competition.teams.map((ct) => ({ id: ct.teamId }));
@@ -54,29 +55,27 @@ export async function POST(req: Request) {
     durationMins: s.durationMins,
   }));
 
-  const fixtures = scheduleFixtures(competitionId, rounds, slots, new Date(startDate));
+  const breaks = await breaksForCompetition(competitionId);
+  const { fixtures, skipped } = scheduleFixtures(competitionId, rounds, slots, new Date(startDate), breaks);
+  const skippedWeeks = skipped.map((s) => ({ weekOf: sydneyDateKey(s.date), breakName: s.breakName }));
 
   await prisma.fixture.createMany({
     data: fixtures.map((f) => ({
       ...f,
       competitionId,
       phase: "REGULAR",
-      status: "SCHEDULED",
+      // Drafts stay off the website until an admin reviews and publishes them.
+      status: "DRAFT",
     })),
-  });
-
-  await prisma.competition.update({
-    where: { id: competitionId },
-    data: { status: "ACTIVE" },
   });
 
   await audit(session, {
     action: "competition.draw.generate",
-    summary: `Generated the draw for ${competition.name}: ${fixtures.length} fixtures over ${rounds.length} rounds from ${startDate}`,
+    summary: `Generated a draft draw for ${competition.name}: ${fixtures.length} fixtures over ${rounds.length} rounds from ${startDate}${skipped.length ? `, skipping ${skipped.length} week${skipped.length === 1 ? "" : "s"} for breaks` : ""}`,
     entityType: "Competition",
     entityId: competitionId,
-    details: { startDate, teams: teams.length, fixtures: fixtures.length, rounds: rounds.length },
+    details: { startDate, teams: teams.length, fixtures: fixtures.length, rounds: rounds.length, skippedWeeks },
   });
 
-  return NextResponse.json({ fixtures: fixtures.length, rounds: rounds.length });
+  return NextResponse.json({ fixtures: fixtures.length, rounds: rounds.length, skippedWeeks });
 }

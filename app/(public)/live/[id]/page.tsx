@@ -5,9 +5,10 @@ import LiveMatchClient from "./LiveMatchClient";
 
 export const dynamic = "force-dynamic";
 
+// Draft fixtures aren't public yet, so they 404 like a missing one.
 async function getFixture(id: string) {
-  return prisma.fixture.findUnique({
-    where: { id },
+  return prisma.fixture.findFirst({
+    where: { id, status: { not: "DRAFT" } },
     include: {
       homeTeam: true,
       awayTeam: true,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStandings, getTopScorers } from "@/lib/standings";
+import { dateKey, sydneyDateKey } from "@/lib/breaks";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,12 @@ async function getData(compId?: string) {
   const activeComp = competitions.find((c) => c.id === compId) ?? competitions[0];
 
   if (!activeComp)
-    return { competitions, activeComp: null, fixtures: [], standings: [], topScorers: [], teams: [] };
+    return { competitions, activeComp: null, fixtures: [], standings: [], topScorers: [], teams: [], breaks: [] };
 
-  const [fixtures, standings, topScorers, teams] = await Promise.all([
+  const [fixtures, standings, topScorers, teams, breaks] = await Promise.all([
     prisma.fixture.findMany({
-      where: { competitionId: activeComp.id },
+      // Drafts stay hidden until an admin publishes the draw.
+      where: { competitionId: activeComp.id, status: { not: "DRAFT" } },
       include: { homeTeam: true, awayTeam: true, pitch: { include: { venue: true } } },
       orderBy: [{ round: "asc" }, { scheduledAt: "asc" }],
     }),
@@ -28,10 +30,22 @@ async function getData(compId?: string) {
       include: { team: { select: { id: true, name: true } } },
       orderBy: { team: { name: "asc" } },
     }),
+    // Upcoming breaks (no games) for this competition or all competitions.
+    prisma.fixtureBreak.findMany({
+      where: {
+        OR: [{ competitionId: null }, { competitionId: activeComp.id }],
+        endDate: { gte: new Date(`${sydneyDateKey(new Date())}T00:00:00Z`) },
+      },
+      orderBy: { startDate: "asc" },
+    }),
   ]);
 
-  return { competitions, activeComp, fixtures, standings, topScorers, teams };
+  return { competitions, activeComp, fixtures, standings, topScorers, teams, breaks };
 }
+
+// A break date (@db.Date, UTC midnight) as e.g. "Sat 20 Dec".
+const fmtDay = (d: Date) =>
+  d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 const STATUS_LABELS: Record<string, string> = {
   SCHEDULED: "vs",
@@ -48,7 +62,7 @@ export default async function CompetitionPage({
   searchParams: Promise<{ comp?: string }>;
 }) {
   const { comp } = await searchParams;
-  const { competitions, activeComp, fixtures, standings, topScorers, teams } = await getData(comp);
+  const { competitions, activeComp, fixtures, standings, topScorers, teams, breaks } = await getData(comp);
 
   if (!activeComp) {
     return (
@@ -91,6 +105,19 @@ export default async function CompetitionPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Fixtures by round */}
         <div className="lg:col-span-2 space-y-6">
+          {breaks.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+              <h2 className="text-sm font-bold text-amber-800 uppercase mb-1">No games</h2>
+              <ul className="text-sm text-amber-900 space-y-0.5">
+                {breaks.map((b) => (
+                  <li key={b.id}>
+                    <span className="font-semibold">{b.name}</span>: {fmtDay(b.startDate)}
+                    {dateKey(b.endDate) !== dateKey(b.startDate) && <> – {fmtDay(b.endDate)}</>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {fixtures.length === 0 && teams.length > 0 && (
             <div>
               <h2 className="text-sm font-bold text-muted uppercase mb-2">

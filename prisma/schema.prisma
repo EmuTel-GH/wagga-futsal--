@@ -224,6 +224,25 @@ model Competition {
   fixtures      Fixture[]
   suspensions   Suspension[]
   dispensations Dispensation[]
+  breaks        FixtureBreak[]
+}
+
+// A period with no games: public holiday, school holidays, Christmas break.
+// Draw generation skips any week where a round would land in one, and
+// "Move games out of breaks" pushes already-scheduled rounds past it.
+// competitionId null = applies to every competition.
+model FixtureBreak {
+  id            String   @id @default(cuid())
+  name          String
+  // Inclusive calendar dates (Sydney).
+  startDate     DateTime @db.Date
+  endDate       DateTime @db.Date
+  competitionId String?
+  createdAt     DateTime @default(now())
+
+  competition Competition? @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@index([startDate])
 }
 
 model CompetitionTimeSlot {
@@ -410,6 +429,9 @@ enum FixturePhase {
 }
 
 enum FixtureStatus {
+  // Generated but not yet published: hidden from the public site, the public
+  // API and the referee portal until an admin publishes the draw.
+  DRAFT
   SCHEDULED
   LIVE
   COMPLETED

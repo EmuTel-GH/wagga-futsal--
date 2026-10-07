@@ -16,6 +16,7 @@ const CATEGORIES = [
   { value: "team.", label: "Teams" },
   { value: "competition.", label: "Competitions" },
   { value: "fixture.", label: "Fixtures & scoring" },
+  { value: "break.", label: "Breaks" },
   { value: "dispensation.", label: "Dispensations" },
   { value: "referee.", label: "Referees" },
   { value: "payroll.", label: "Payroll" },

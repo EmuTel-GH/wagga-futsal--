@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { dateKey } from "@/lib/breaks";
 import FixturesClient from "./FixturesClient";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ type Props = { searchParams: Promise<{ comp?: string }> };
 export default async function FixturesPage({ searchParams }: Props) {
   const { comp } = await searchParams;
 
-  const [fixtures, referees, pitches, competitions] = await Promise.all([
+  const [fixtures, referees, pitches, competitions, breaks] = await Promise.all([
     prisma.fixture.findMany({
       where: comp ? { competitionId: comp } : undefined,
       include: {
@@ -33,6 +34,7 @@ export default async function FixturesPage({ searchParams }: Props) {
       select: { id: true, name: true, season: true },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.fixtureBreak.findMany({ orderBy: { startDate: "asc" } }),
   ]);
 
   // Referees imported from PlayFootball may have no linked login (user = null);
@@ -56,6 +58,7 @@ export default async function FixturesPage({ searchParams }: Props) {
         pitches={pitches}
         competitions={competitions}
         selectedCompId={comp ?? ""}
+        breaks={breaks.map((b) => ({ name: b.name, startDate: dateKey(b.startDate), endDate: dateKey(b.endDate), competitionId: b.competitionId }))}
       />
     </div>
   );

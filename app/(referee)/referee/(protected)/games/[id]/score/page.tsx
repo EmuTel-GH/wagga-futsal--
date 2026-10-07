@@ -17,7 +17,8 @@ export default async function ScorerPage({ params }: { params: Promise<{ id: str
     },
   });
 
-  if (!fixture) notFound();
+  // Unpublished (draft) fixtures can't be scored.
+  if (!fixture || fixture.status === "DRAFT") notFound();
 
   return <ScorerConsole fixture={fixture} />;
 }

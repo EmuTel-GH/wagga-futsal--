@@ -12,7 +12,7 @@ export default function AdminNav({ items }: { items: { href: string; label: stri
     href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <nav className="flex-1 px-2 py-3 space-y-0.5">
+    <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-3 space-y-0.5">
       {items.map((n) => {
         const active = isActive(n.href);
         return (
