@@ -409,6 +409,35 @@ export default function TeamRow({
     else setReviewing(null);
   };
 
+  // Authorise / reject every flagged name at once, with one shared reason.
+  const [bulk, setBulk] = useState<"authorise" | "reject" | null>(null);
+  const handleBulk = async (reason: string) => {
+    if (!bulk) return;
+    setReviewBusy(true);
+    setExpectedError("");
+    const res = await fetch(`/api/admin/teams/${team.id}/expected/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: bulk, reason, expectedIds: flagged.map((f) => f.ex.id) }),
+    });
+    const data = await res.json();
+    setReviewBusy(false);
+    if (!res.ok) return setExpectedError(data.error ?? "Failed");
+    if (data.dispensations?.length) onDispensations(data.dispensations);
+    const rejectedById = new Map<string, Expected>(data.rejected.map((x: Expected) => [x.id, x]));
+    onUpdated({
+      ...team,
+      players: [...team.players, ...data.added],
+      _count: { players: team._count.players + data.added.length },
+      expected: (team.expected ?? []).map((x) => ({ ...x, ...rejectedById.get(x.id) })),
+    });
+    if (data.errors.length) {
+      setExpectedError(data.errors.map((e: { name: string; error: string }) => `${e.name}: ${e.error}`).join(" "));
+    }
+    setBulk(null);
+    setReviewing(null);
+  };
+
   const setRejected = async (expectedId: string, rejected: boolean, reason?: string) => {
     setReviewBusy(true);
     setExpectedError("");
@@ -691,7 +720,42 @@ export default function TeamRow({
               >
                 {expectedOpen ? "Cancel" : (team.expected ?? []).length > 0 ? "Edit list" : "Paste from registration form"}
               </button>
+              {flagged.length > 0 && !expectedOpen && !bulk && (
+                <span className="ml-auto flex items-center gap-2">
+                  {canOverride && (
+                    <button
+                      onClick={() => { setBulk("authorise"); setReviewing(null); }}
+                      disabled={reviewBusy}
+                      className="border border-amber-400 bg-amber-50 text-amber-800 px-2.5 py-1 rounded text-xs font-semibold hover:border-amber-600 disabled:opacity-60"
+                    >
+                      Authorise all ({flagged.length})
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setBulk("reject"); setReviewing(null); }}
+                    disabled={reviewBusy}
+                    className="border border-red-300 bg-red-50 text-red-700 px-2.5 py-1 rounded text-xs font-semibold hover:border-red-500 disabled:opacity-60"
+                  >
+                    Reject all ({flagged.length})
+                  </button>
+                </span>
+              )}
             </div>
+            {bulk && (
+              <ReasonPrompt
+                message={
+                  bulk === "authorise"
+                    ? `Authorise all ${flagged.length} ineligible players (${flagged.map((f) => `${f.ex.firstName} ${f.ex.lastName}`.trim()).join(", ")}) despite the rules, and add them to the squad. Each one is recorded with this reason.`
+                    : `Reject all ${flagged.length} ineligible players (${flagged.map((f) => `${f.ex.firstName} ${f.ex.lastName}`.trim()).join(", ")}). They stay on the list, marked rejected.`
+                }
+                confirmLabel={bulk === "authorise" ? `Authorise & add ${flagged.length}` : `Reject ${flagged.length}`}
+                tone={bulk === "authorise" ? "approve" : "reject"}
+                required={bulk === "authorise"}
+                busy={reviewBusy}
+                onConfirm={handleBulk}
+                onCancel={() => setBulk(null)}
+              />
+            )}
 
             {expectedOpen ? (
               <form onSubmit={handleSaveExpected} className="mb-2">
