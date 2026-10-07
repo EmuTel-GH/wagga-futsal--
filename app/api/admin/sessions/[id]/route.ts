@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, { params }: Params) {
+  let actor;
   try {
-    await requireAdmin();
+    actor = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -37,19 +39,29 @@ export async function PATCH(req: Request, { params }: Params) {
     },
   });
 
+  await audit(actor, {
+    action: "session.update",
+    summary: `Updated session ${session.title} (${Object.keys(data).join(", ")})`,
+    entityType: "FutsalSession",
+    entityId: id,
+    details: data,
+  });
+
   return NextResponse.json(session);
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
+  let actor;
   try {
-    await requireAdmin();
+    actor = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
 
-  await prisma.futsalSession.delete({ where: { id } });
+  const session = await prisma.futsalSession.delete({ where: { id } });
+  await audit(actor, { action: "session.delete", summary: `Deleted session ${session.title}`, entityType: "FutsalSession", entityId: id, details: session });
 
   return NextResponse.json({ ok: true });
 }

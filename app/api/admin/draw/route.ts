@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import { generateRoundRobin, scheduleFixtures } from "@/lib/draw";
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -66,6 +68,14 @@ export async function POST(req: Request) {
   await prisma.competition.update({
     where: { id: competitionId },
     data: { status: "ACTIVE" },
+  });
+
+  await audit(session, {
+    action: "competition.draw.generate",
+    summary: `Generated the draw for ${competition.name}: ${fixtures.length} fixtures over ${rounds.length} rounds from ${startDate}`,
+    entityType: "Competition",
+    entityId: competitionId,
+    details: { startDate, teams: teams.length, fixtures: fixtures.length, rounds: rounds.length },
   });
 
   return NextResponse.json({ fixtures: fixtures.length, rounds: rounds.length });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import { generateABA } from "@/lib/aba";
 
 // Two referee rate tiers: senior games (U16 & Opens — incl. U19/Social) and
@@ -72,7 +73,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  try { await requireAdmin(); } catch {
+  let session;
+  try { session = await requireAdmin(); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -148,6 +150,13 @@ export async function POST(req: Request) {
   });
 
   const filename = `referee-pay-${from}-to-${to}.aba`;
+  const totalCents = payees.reduce((s, p) => s + p.amountCents, 0);
+  await audit(session, {
+    action: "payroll.aba.export",
+    summary: `Exported referee pay ABA file for ${from} to ${to}: ${payees.length} payees, $${(totalCents / 100).toFixed(2)}`,
+    entityType: "PayRate",
+    details: { from, to, payees: payees.length, totalCents, orgName, orgBank },
+  });
   return new Response(aba, {
     headers: {
       "Content-Type": "text/plain",
@@ -157,7 +166,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  try { await requireAdmin(); } catch {
+  let session;
+  try { session = await requireAdmin(); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -167,6 +177,14 @@ export async function PATCH(req: Request) {
     where: { id: "default" },
     create: { id: "default", fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
     update: { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
+  });
+
+  await audit(session, {
+    action: "payroll.rates.update",
+    summary: "Updated referee pay rates",
+    entityType: "PayRate",
+    entityId: rate.id,
+    details: { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
   });
 
   return NextResponse.json(rate);

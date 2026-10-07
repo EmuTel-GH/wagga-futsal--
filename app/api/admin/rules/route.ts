@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 
 export async function GET() {
   try {
@@ -18,8 +19,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -35,6 +37,14 @@ export async function POST(req: Request) {
 
   const doc = await prisma.rulesDocument.create({
     data: { title, content, version, active: true },
+  });
+
+  await audit(session, {
+    action: "rules.publish",
+    summary: `Published rules "${title}" version ${version}`,
+    entityType: "RulesDocument",
+    entityId: doc.id,
+    details: { title, version, characters: String(content).length },
   });
 
   return NextResponse.json(doc, { status: 201 });

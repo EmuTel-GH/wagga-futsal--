@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireReferee } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import type { Prisma } from "@prisma/client";
 type EventType = "GOAL" | "YELLOW_CARD" | "RED_CARD" | "FOUL";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  let session;
   try {
-    await requireReferee();
+    session = await requireReferee();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -61,6 +63,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (fixture.status === "SCHEDULED") {
     await prisma.fixture.update({ where: { id: fixtureId }, data: { status: "LIVE" } });
   }
+
+  await audit(session, {
+    action: "fixture.event.add",
+    summary: `Recorded ${type.replace("_", " ").toLowerCase()} for ${event.team.name}${playerName ? ` (${playerName})` : ""}, half ${event.half}, ${event.minute}'`,
+    entityType: "Fixture",
+    entityId: fixtureId,
+    details: { eventId: event.id, teamId, type, minute, half, playerName, jerseyNumber, playerId },
+  });
 
   return NextResponse.json(event, { status: 201 });
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { audit } from "@/lib/audit";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
@@ -22,8 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  let session;
   try {
-    await requireAdmin();
+    session = await requireAdmin();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -54,6 +56,14 @@ export async function POST(req: Request) {
     include: {
       referee: true,
     },
+  });
+
+  await audit(session, {
+    action: "referee.create",
+    summary: `Created referee login ${email} (${name})`,
+    entityType: "User",
+    entityId: user.id,
+    details: { name, email, phone },
   });
 
   return NextResponse.json(user, { status: 201 });

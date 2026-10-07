@@ -1,8 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import { reviewExpected, type ExpectedReview } from "@/lib/eligibility";
 
-type Player = { id: string; firstName: string; lastName: string };
+type AgeGroup = "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U14" | "U16" | "U19" | "OPENS" | "SOCIAL";
+type Gender = "MALE" | "FEMALE" | "MIXED";
+type DispensationType = "PLAY_UP" | "PLAY_DOWN" | "OVERRIDE";
+
+export type Player = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: Date | string;
+  gender: Gender;
+  registeredAgeGroup: AgeGroup | null;
+};
+export type Dispensation = {
+  id: string;
+  playerId: string;
+  competitionId: string;
+  type: DispensationType;
+  approvedBy: string;
+  note: string | null;
+};
 type TeamPlayer = {
   id: string;
   playerId: string;
@@ -11,10 +31,10 @@ type TeamPlayer = {
   additionalFeePaid?: boolean;
   player: Player;
 };
-type CompetitionRef = { id: string; name: string; season: string };
+type CompetitionRef = { id: string; name: string; season: string; ageGroup: AgeGroup; gender: Gender };
 type CompetitionTeam = { id: string; teamId: string; competition: CompetitionRef };
 
-type Team = {
+export type Team = {
   id: string;
   name: string;
   status?: string;
@@ -33,7 +53,79 @@ type Team = {
 
 type Competition = { id: string; name: string; season: string };
 type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
-type Expected = { id: string; firstName: string; lastName: string };
+type Expected = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  rejectedAt?: Date | string | null;
+  rejectedBy?: string | null;
+  rejectReason?: string | null;
+};
+
+const DISPENSATION_LABEL: Record<DispensationType, string> = {
+  PLAY_UP: "Play-up approved",
+  PLAY_DOWN: "Play-down approved",
+  OVERRIDE: "Rules overridden",
+};
+
+function reviewTeam(team: Team, allPlayers: Player[], dispensations: Dispensation[]) {
+  const competition = team.competitions[0]?.competition ?? null;
+  const rosterPlayerIds = team.players.map((p) => p.playerId);
+  return (team.expected ?? []).map((ex) => ({
+    ex,
+    review: reviewExpected({ expected: ex, players: allPlayers, rosterPlayerIds, competition, dispensations }),
+  }));
+}
+
+/** Pending nomination, or expected players an admin must authorise/reject. */
+export function teamNeedsReview(team: Team, allPlayers: Player[], dispensations: Dispensation[]) {
+  return team.status === "PENDING" || reviewTeam(team, allPlayers, dispensations).some((r) => r.review.state === "INELIGIBLE");
+}
+
+// Inline "reason" prompt used for overrides, authorisations and rejections.
+function ReasonPrompt({
+  message,
+  confirmLabel,
+  tone,
+  required,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  confirmLabel: string;
+  tone: "approve" | "reject";
+  required: boolean;
+  busy: boolean;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  return (
+    <div className={`mt-1 mb-2 rounded-lg border p-2.5 ${tone === "approve" ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}>
+      <p className="text-xs text-navy mb-1.5">{message}</p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={required ? "Reason (required — recorded in the audit log)" : "Reason (optional)"}
+          className="border border-border rounded px-2 py-1.5 text-xs flex-1 min-w-[14rem] focus:outline-none focus:ring-1 focus:ring-brand bg-white"
+        />
+        <button
+          disabled={busy || (required && reason.trim().length < 3)}
+          onClick={() => onConfirm(reason.trim())}
+          className={`px-3 py-1.5 rounded text-xs font-bold text-white disabled:opacity-60 ${tone === "approve" ? "bg-amber-600 hover:bg-amber-700" : "bg-red-600 hover:bg-red-700"}`}
+        >
+          {busy ? "Saving…" : confirmLabel}
+        </button>
+        <button onClick={onCancel} className="border border-border bg-white px-2 py-1.5 rounded text-xs hover:border-brand">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => void }) {
   const [editing, setEditing] = useState(false);
@@ -117,16 +209,22 @@ export default function TeamRow({
   allPlayers,
   allCompetitions,
   allOfficials,
+  dispensations,
+  canOverride,
   onUpdated,
   onDeleted,
+  onDispensations,
 }: {
   team: Team;
   allTeams: Team[];
   allPlayers: Player[];
   allCompetitions: Competition[];
   allOfficials: Official[];
+  dispensations: Dispensation[];
+  canOverride: boolean;
   onUpdated: (t: Team) => void;
   onDeleted: (id: string) => void;
+  onDispensations: (d: Dispensation[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [addPlayerForm, setAddPlayerForm] = useState({ playerId: "", jerseyNumber: "" });
@@ -137,25 +235,68 @@ export default function TeamRow({
   const [playerError, setPlayerError] = useState("");
   const [compError, setCompError] = useState("");
 
+  // A rule block the current admin may override: { playerId, jersey, message }.
+  const [blocked, setBlocked] = useState<{ playerId: string; jerseyNumber: string | null; message: string; from: "search" | "expected" } | null>(null);
+  const [overrideBusy, setOverrideBusy] = useState(false);
+
+  // POST the player; on a rule block, either show the error or offer an override.
+  const addPlayer = async (
+    playerId: string,
+    jerseyNumber: string | null,
+    from: "search" | "expected",
+    overrideReason?: string
+  ): Promise<string | null> => {
+    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        playerId,
+        jerseyNumber,
+        ...(overrideReason ? { override: { reason: overrideReason } } : {}),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 409 && data.overridable && !overrideReason) {
+        setBlocked({ playerId, jerseyNumber, message: data.error, from });
+        return null;
+      }
+      return data.error ?? "Failed";
+    }
+    const { dispensations: added, ...teamPlayer } = data;
+    if (added?.length) onDispensations(added);
+    onUpdated({
+      ...team,
+      players: [...team.players, teamPlayer],
+      _count: { players: team._count.players + 1 },
+    });
+    setBlocked(null);
+    return null;
+  };
+
+  const handleOverride = async (reason: string) => {
+    if (!blocked) return;
+    setOverrideBusy(true);
+    const err = await addPlayer(blocked.playerId, blocked.jerseyNumber, blocked.from, reason);
+    setOverrideBusy(false);
+    if (err) (blocked.from === "search" ? setPlayerError : setExpectedError)(err);
+    else if (blocked.from === "search") {
+      setAddPlayerForm({ playerId: "", jerseyNumber: "" });
+      setPlayerQuery("");
+    }
+  };
+
   const handleAddPlayer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addPlayerForm.playerId) return;
     setPlayerSaving(true);
     setPlayerError("");
-    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId: addPlayerForm.playerId, jerseyNumber: addPlayerForm.jerseyNumber || null }),
-    });
-    const data = await res.json();
+    setBlocked(null);
+    const err = await addPlayer(addPlayerForm.playerId, addPlayerForm.jerseyNumber || null, "search");
     setPlayerSaving(false);
-    if (!res.ok) { setPlayerError(data.error ?? "Failed"); return; }
-    onUpdated({
-      ...team,
-      players: [...team.players, data],
-      _count: { players: team._count.players + 1 },
-    });
+    if (err) { setPlayerError(err); return; }
     setAddPlayerForm({ playerId: "", jerseyNumber: "" });
+    setPlayerQuery("");
   };
 
   const handleToggleFee = async (tp: TeamPlayer) => {
@@ -195,13 +336,16 @@ export default function TeamRow({
       t.competitions.some((c) => myCompIds.includes(c.competition.id))
   );
 
+  const [approveError, setApproveError] = useState("");
   const handleApprove = async () => {
+    setApproveError("");
     const res = await fetch(`/api/admin/teams/${team.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "APPROVED" }),
     });
     if (res.ok) onUpdated({ ...team, status: "APPROVED" });
+    else setApproveError((await res.json()).error ?? "Failed");
   };
 
   const handleMerge = async () => {
@@ -238,27 +382,46 @@ export default function TeamRow({
     setExpectedOpen(false);
   };
 
-  // Match an expected name against actual registrations (case-insensitive).
-  const matchPlayer = (ex: Expected) =>
-    allPlayers.find(
-      (p) =>
-        p.firstName.toLowerCase() === ex.firstName.toLowerCase() &&
-        p.lastName.toLowerCase() === ex.lastName.toLowerCase()
-    );
+  // Each expected name: registered? in the team? eligible for the team's competition?
+  const reviews = reviewTeam(team, allPlayers, dispensations);
+  const flagged = reviews.filter((r) => r.review.state === "INELIGIBLE");
+  const competitionId = team.competitions[0]?.competition.id;
+  const dispensationFor = (playerId: string) =>
+    dispensations.find((d) => d.playerId === playerId && d.competitionId === competitionId);
 
   const handleQuickAdd = async (playerId: string) => {
     setExpectedError("");
-    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
-      method: "POST",
+    setBlocked(null);
+    const err = await addPlayer(playerId, null, "expected");
+    if (err) setExpectedError(err);
+  };
+
+  // Authorise / reject an ineligible nominated player.
+  const [reviewing, setReviewing] = useState<{ expectedId: string; action: "authorise" | "reject" } | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+
+  const handleAuthorise = async (playerId: string, reason: string) => {
+    setReviewBusy(true);
+    setExpectedError("");
+    const err = await addPlayer(playerId, null, "expected", reason);
+    setReviewBusy(false);
+    if (err) setExpectedError(err);
+    else setReviewing(null);
+  };
+
+  const setRejected = async (expectedId: string, rejected: boolean, reason?: string) => {
+    setReviewBusy(true);
+    setExpectedError("");
+    const res = await fetch(`/api/admin/teams/${team.id}/expected`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId }),
+      body: JSON.stringify({ expectedId, rejected, reason }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      setExpectedError(data.error ?? "Failed");
-      return;
-    }
-    onUpdated({ ...team, players: [...team.players, data], _count: { players: team._count.players + 1 } });
+    setReviewBusy(false);
+    if (!res.ok) return setExpectedError(data.error ?? "Failed");
+    onUpdated({ ...team, expected: (team.expected ?? []).map((x) => (x.id === expectedId ? { ...x, ...data } : x)) });
+    setReviewing(null);
   };
 
   const handleAddOfficial = async (e: React.FormEvent) => {
@@ -324,6 +487,11 @@ export default function TeamRow({
               Pending approval
             </span>
           )}
+          {flagged.length > 0 && (
+            <span className="ml-2 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+              {flagged.length} ineligible to review
+            </span>
+          )}
           <span className="ml-2 text-xs text-muted">{team._count.players} players</span>
           {team.competitions.length > 0 && (
             <span className="ml-2 text-xs text-muted">
@@ -347,10 +515,19 @@ export default function TeamRow({
               <p className="text-xs text-amber-800 font-semibold mb-2">
                 Public team nomination — approve it as a new team, or merge it into an existing one.
               </p>
+              {flagged.length > 0 && (
+                <p className="text-xs text-red-700 mb-2">
+                  {flagged.length} nominated player{flagged.length === 1 ? " is" : "s are"} not eligible for this
+                  competition. Authorise or reject {flagged.length === 1 ? "them" : "each one"} under Expected Squad
+                  before approving the team.
+                </p>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={handleApprove}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold"
+                  disabled={flagged.length > 0}
+                  title={flagged.length > 0 ? "Review the ineligible players first" : undefined}
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Approve team
                 </button>
@@ -377,6 +554,7 @@ export default function TeamRow({
                   </>
                 )}
               </div>
+              {approveError && <p className="text-xs text-red-600 mt-2">{approveError}</p>}
             </div>
           )}
 
@@ -402,6 +580,17 @@ export default function TeamRow({
                     <tr key={tp.id}>
                       <td className="py-1">
                         {tp.player.firstName} {tp.player.lastName}
+                        {(() => {
+                          const d = dispensationFor(tp.playerId);
+                          return d ? (
+                            <span
+                              title={`Approved by ${d.approvedBy}${d.note ? ` — ${d.note}` : ""}`}
+                              className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-amber-50 border-amber-300 text-amber-700"
+                            >
+                              {DISPENSATION_LABEL[d.type]} · {d.approvedBy}
+                            </span>
+                          ) : null;
+                        })()}
                         {tp.isPrimary === false && (
                           <button
                             onClick={() => handleToggleFee(tp)}
@@ -457,6 +646,17 @@ export default function TeamRow({
                   </button>
                   {playerError && <span className="text-xs text-red-600">{playerError}</span>}
                 </div>
+                {blocked?.from === "search" && (
+                  <ReasonPrompt
+                    message={`${blocked.message} You can approve this placement anyway.`}
+                    confirmLabel="Approve & add anyway"
+                    tone="approve"
+                    required
+                    busy={overrideBusy}
+                    onConfirm={handleOverride}
+                    onCancel={() => setBlocked(null)}
+                  />
+                )}
                 {playerQuery.length >= 2 && !addPlayerForm.playerId && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {availablePlayers
@@ -513,27 +713,25 @@ export default function TeamRow({
               </p>
             ) : (
               <ul className="text-xs mb-1 space-y-1">
-                {(team.expected ?? []).map((ex) => {
-                  const match = matchPlayer(ex);
-                  const inTeam = match && team.players.some((tp) => tp.playerId === match.id);
-                  return (
-                    <li key={ex.id} className="flex items-center gap-2">
-                      <span>{ex.firstName} {ex.lastName}</span>
-                      {inTeam ? (
-                        <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full">✓ in team</span>
-                      ) : match ? (
-                        <>
-                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">registered — not in team</span>
-                          <button onClick={() => handleQuickAdd(match.id)} className="text-brand text-xs font-semibold hover:underline">
-                            Add
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">not registered yet</span>
-                      )}
-                    </li>
-                  );
-                })}
+                {reviews.map(({ ex, review }) => (
+                  <ExpectedItem
+                    key={ex.id}
+                    ex={ex}
+                    review={review}
+                    canOverride={canOverride}
+                    dispensation={"player" in review ? dispensationFor(review.player.id) : undefined}
+                    reviewing={reviewing?.expectedId === ex.id ? reviewing.action : null}
+                    blockedMessage={blocked?.from === "expected" && "player" in review && blocked.playerId === review.player.id ? blocked.message : null}
+                    busy={reviewBusy || overrideBusy}
+                    onAdd={(playerId) => handleQuickAdd(playerId)}
+                    onStartReview={(action) => setReviewing({ expectedId: ex.id, action })}
+                    onCancelReview={() => { setReviewing(null); setBlocked(null); }}
+                    onAuthorise={(playerId, reason) => handleAuthorise(playerId, reason)}
+                    onOverride={handleOverride}
+                    onReject={(reason) => setRejected(ex.id, true, reason)}
+                    onUnreject={() => setRejected(ex.id, false)}
+                  />
+                ))}
               </ul>
             )}
             {expectedError && <p className="text-xs text-red-600">{expectedError}</p>}
@@ -608,5 +806,132 @@ export default function TeamRow({
         </div>
       )}
     </div>
+  );
+}
+
+function ExpectedItem({
+  ex,
+  review,
+  canOverride,
+  dispensation,
+  reviewing,
+  blockedMessage,
+  busy,
+  onAdd,
+  onStartReview,
+  onCancelReview,
+  onAuthorise,
+  onOverride,
+  onReject,
+  onUnreject,
+}: {
+  ex: Expected;
+  review: ExpectedReview;
+  canOverride: boolean;
+  dispensation?: Dispensation;
+  reviewing: "authorise" | "reject" | null;
+  blockedMessage: string | null;
+  busy: boolean;
+  onAdd: (playerId: string) => void;
+  onStartReview: (action: "authorise" | "reject") => void;
+  onCancelReview: () => void;
+  onAuthorise: (playerId: string, reason: string) => void;
+  onOverride: (reason: string) => void;
+  onReject: (reason: string) => void;
+  onUnreject: () => void;
+}) {
+  const name = `${ex.firstName} ${ex.lastName}`.trim();
+  const pill = "text-[10px] font-bold px-1.5 py-0.5 rounded-full border";
+  const link = "text-brand text-xs font-semibold hover:underline disabled:opacity-60";
+
+  if (review.state === "REJECTED") {
+    return (
+      <li className="flex items-center gap-2 flex-wrap">
+        <span className="line-through text-muted">{name}</span>
+        <span className={`${pill} bg-gray-100 border-gray-300 text-gray-600`}>rejected</span>
+        <span className="text-muted">
+          by {ex.rejectedBy}
+          {ex.rejectReason ? ` — ${ex.rejectReason}` : ""}
+        </span>
+        <button onClick={onUnreject} disabled={busy} className={link}>Undo</button>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span>{name}</span>
+        {review.state === "IN_TEAM" && (
+          <span className={`${pill} text-green-700 bg-green-50 border-green-200`}>✓ in team</span>
+        )}
+        {review.state === "UNREGISTERED" && (
+          <span className={`${pill} text-red-700 bg-red-50 border-red-200`}>not registered yet</span>
+        )}
+        {review.state === "ELIGIBLE" && (
+          <>
+            <span className={`${pill} text-amber-700 bg-amber-50 border-amber-200`}>registered — not in team</span>
+            {dispensation && (
+              <span className={`${pill} text-amber-700 bg-amber-50 border-amber-300`} title={dispensation.note ?? undefined}>
+                {DISPENSATION_LABEL[dispensation.type]} · {dispensation.approvedBy}
+              </span>
+            )}
+            <button onClick={() => onAdd(review.player.id)} disabled={busy} className={link}>Add</button>
+          </>
+        )}
+        {review.state === "INELIGIBLE" && (
+          <>
+            <span className={`${pill} text-red-700 bg-red-50 border-red-300`}>⚠ ineligible — needs review</span>
+            {canOverride && !reviewing && (
+              <button onClick={() => onStartReview("authorise")} disabled={busy} className={link}>Authorise</button>
+            )}
+            {!reviewing && (
+              <button onClick={() => onStartReview("reject")} disabled={busy} className="text-red-600 text-xs font-semibold hover:underline">
+                Reject
+              </button>
+            )}
+          </>
+        )}
+      </div>
+      {review.state === "INELIGIBLE" && (
+        <p className="text-[11px] text-red-700 mt-0.5">
+          {review.reason}
+          {!canOverride && " An administrator with the Override rules permission can authorise this."}
+        </p>
+      )}
+      {review.state === "INELIGIBLE" && reviewing === "authorise" && (
+        <ReasonPrompt
+          message={`Authorise ${name} for this team despite the rule above, and add them to the squad.`}
+          confirmLabel="Authorise & add"
+          tone="approve"
+          required
+          busy={busy}
+          onConfirm={(reason) => onAuthorise(review.player.id, reason)}
+          onCancel={onCancelReview}
+        />
+      )}
+      {review.state === "INELIGIBLE" && reviewing === "reject" && (
+        <ReasonPrompt
+          message={`Reject ${name} from this team's nomination. They stay on the list, marked rejected.`}
+          confirmLabel="Reject"
+          tone="reject"
+          required={false}
+          busy={busy}
+          onConfirm={onReject}
+          onCancel={onCancelReview}
+        />
+      )}
+      {blockedMessage && (
+        <ReasonPrompt
+          message={`${blockedMessage} You can approve this placement anyway.`}
+          confirmLabel="Approve & add anyway"
+          tone="approve"
+          required
+          busy={busy}
+          onConfirm={onOverride}
+          onCancel={onCancelReview}
+        />
+      )}
+    </li>
   );
 }
