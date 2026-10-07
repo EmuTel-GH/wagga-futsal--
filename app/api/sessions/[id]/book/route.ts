@@ -23,7 +23,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: `Only ${spotsLeft} spots remaining` }, { status: 400 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // Read at RUNTIME. NEXT_PUBLIC_* is inlined at build time, which would freeze
+  // the Stripe return URL into the image. Falls back to the old name so Vercel
+  // is unchanged.
+  const appUrl =
+    process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   // Create Stripe checkout session
   const checkoutSession = await stripe.checkout.sessions.create({
