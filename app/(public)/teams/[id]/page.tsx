@@ -1,5 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import AddToCalendar from "@/components/public/AddToCalendar";
+import SaveTeamButton from "@/components/public/SaveTeamButton";
+import ScheduleList from "@/components/public/ScheduleList";
+import { teamSchedule } from "@/lib/teamSchedule";
+import { sydneyDateKey } from "@/lib/breakDates";
 import { prisma } from "@/lib/prisma";
 import { getStandings } from "@/lib/standings";
 import type { Metadata } from "next";
@@ -54,21 +59,12 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
     take: 8,
   });
 
-  const upcomingFixtures = await prisma.fixture.findMany({
-    where: {
-      OR: [{ homeTeamId: id }, { awayTeamId: id }],
-      status: "SCHEDULED",
-      scheduledAt: { gte: new Date() },
-    },
-    include: {
-      homeTeam: true,
-      awayTeam: true,
-      competition: true,
-      pitch: { include: { venue: true } },
-    },
-    orderBy: { scheduledAt: "asc" },
-    take: 5,
-  });
+  // Full schedule (games + byes) from the same source as the calendar feed.
+  const today = sydneyDateKey(new Date());
+  const upcoming = (await teamSchedule([id])).items.filter((i) =>
+    i.kind === "bye" ? i.day >= today : sydneyDateKey(i.start) >= today && !["COMPLETED", "FORFEITED_HOME", "FORFEITED_AWAY"].includes(i.status)
+  );
+
 
   // Top scorers for this team across all competitions
   const teamScorers = await prisma.matchEvent.groupBy({
@@ -115,52 +111,25 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           ← Back to Competitions
         </Link>
         <h1 className="text-4xl font-black text-navy">{team.name}</h1>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <SaveTeamButton team={{ id: team.id, name: team.name }} />
+          <AddToCalendar feedPath={`/api/teams/${team.id}/calendar`} name={`${team.name} — Wagga Futsal`} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Upcoming fixtures */}
-          {upcomingFixtures.length > 0 && (
-            <div>
-              <h2 className="text-xl font-black text-navy mb-3">Upcoming</h2>
-              <div className="space-y-2">
-                {upcomingFixtures.map((f) => {
-                  const isHome = f.homeTeamId === id;
-                  const opp = isHome ? f.awayTeam : f.homeTeam;
-                  return (
-                    <div
-                      key={f.id}
-                      className="flex items-center justify-between bg-white border border-border rounded-xl p-4"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-muted mb-1">
-                          {f.competition.name} · {f.pitch?.venue.name ?? "TBC"}
-                        </p>
-                        <p className="font-semibold text-navy">
-                          {isHome ? "vs" : "@"} {opp.name}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0 ml-4">
-                        <p className="text-sm font-semibold text-navy">
-                          {new Date(f.scheduledAt).toLocaleDateString("en-AU", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
-                        </p>
-                        <p className="text-xs text-muted">
-                          {new Date(f.scheduledAt).toLocaleTimeString("en-AU", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* Fixtures: everything still to come, byes included */}
+          <div>
+            <h2 className="text-xl font-black text-navy mb-3">Fixtures</h2>
+            {upcoming.length > 0 ? (
+              <ScheduleList items={upcoming} />
+            ) : (
+              <p className="text-sm text-muted bg-white border border-border rounded-xl p-4">
+                No upcoming games published yet. Save the team or add it to your calendar and new fixtures will show up there too.
+              </p>
+            )}
+          </div>
 
           {/* Recent results */}
           {recentFixtures.length > 0 && (
