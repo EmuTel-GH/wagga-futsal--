@@ -34,7 +34,7 @@ export default function AddToCalendar({ feedPath, name, compact = false }: { fee
         📅 Add to calendar
       </button>
       {open && origin && (
-        <div className="absolute z-20 mt-2 w-72 bg-white border border-border rounded-xl shadow-xl p-2 left-0">
+        <div className="absolute z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white border border-border rounded-xl shadow-xl p-2 right-0">
           <p className="text-[11px] text-muted px-2 pb-2">
             Games, byes and results appear in your calendar and update automatically if the draw changes.
           </p>
