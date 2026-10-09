@@ -67,7 +67,21 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const data: Record<string, unknown> = {};
   if (typeof additionalFeePaid === "boolean") data.additionalFeePaid = additionalFeePaid;
-  if (jerseyNumber !== undefined) data.jerseyNumber = jerseyNumber ? Number(jerseyNumber) : null;
+  if (jerseyNumber !== undefined) {
+    const n = jerseyNumber === null || jerseyNumber === "" ? null : Number(jerseyNumber);
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 999)) {
+      return NextResponse.json({ error: "Shirt number must be 0–999" }, { status: 400 });
+    }
+    // Shirt numbers are unique within a team.
+    const taken = n === null ? null : await prisma.teamPlayer.findFirst({
+      where: { teamId, jerseyNumber: n, playerId: { not: playerId } },
+      include: { player: { select: { firstName: true, lastName: true } } },
+    });
+    if (taken) {
+      return NextResponse.json({ error: `#${n} is ${taken.player.firstName} ${taken.player.lastName}'s` }, { status: 409 });
+    }
+    data.jerseyNumber = n;
+  }
 
   const teamPlayer = await prisma.teamPlayer.update({
     where: { teamId_playerId: { teamId, playerId } },

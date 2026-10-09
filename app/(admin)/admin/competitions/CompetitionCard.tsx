@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Competition, Venue } from "./CompetitionsClient";
 import GenerateDrawForm, { describeDraw } from "@/components/admin/GenerateDrawForm";
 import SplitPanel from "./SplitPanel";
+import FinalsPanel from "./FinalsPanel";
 
 const STATUS_COLOURS: Record<string, string> = {
   REGISTRATION: "bg-blue-100 text-blue-700",
@@ -25,9 +26,6 @@ export default function CompetitionCard({
   onUpdated: (c: Competition) => void;
   onDeleted: (id: string) => void;
 }) {
-  const [finalsDate, setFinalsDate] = useState("");
-  const [finalsPitch, setFinalsPitch] = useState(venues[0]?.pitches[0]?.id ?? "");
-  const [finalsLoading, setFinalsLoading] = useState(false);
   const [slotForm, setSlotForm] = useState({
     pitchId: venues[0]?.pitches[0]?.id ?? "",
     dayOfWeek: "3",
@@ -38,7 +36,6 @@ export default function CompetitionCard({
   const [slotError, setSlotError] = useState("");
   const [statusChanging, setStatusChanging] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [actionMsg, setActionMsg] = useState("");
 
   const handleStatusChange = async (status: string) => {
     setStatusChanging(true);
@@ -61,21 +58,6 @@ export default function CompetitionCard({
 
   const [drawMsg, setDrawMsg] = useState("");
   const [splitOpen, setSplitOpen] = useState(false);
-
-  const handleStartFinals = async () => {
-    if (!finalsDate || !finalsPitch) { setActionMsg("Enter finals date and pitch"); return; }
-    setFinalsLoading(true);
-    setActionMsg("");
-    const res = await fetch("/api/admin/finals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitionId: competition.id, semifinalDate: finalsDate, pitchId: finalsPitch }),
-    });
-    const data = await res.json();
-    setFinalsLoading(false);
-    setActionMsg(res.ok ? `Finals created: ${data.created} fixtures` : data.error);
-    if (res.ok) onUpdated({ ...competition, status: "FINALS" });
-  };
 
   const handleAddSlot = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,41 +244,11 @@ export default function CompetitionCard({
       )}
 
       {/* Finals */}
-      <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Start Finals</p>
-          <div className="flex flex-wrap gap-2 items-center">
-            <input
-              type="datetime-local"
-              value={finalsDate}
-              onChange={(e) => setFinalsDate(e.target.value)}
-              className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
-            />
-            <select
-              value={finalsPitch}
-              onChange={(e) => setFinalsPitch(e.target.value)}
-              className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
-            >
-              {venues.flatMap((v) =>
-                v.pitches.map((p) => (
-                  <option key={p.id} value={p.id}>{v.name} – {p.name}</option>
-                ))
-              )}
-            </select>
-            <button
-              onClick={handleStartFinals}
-              disabled={finalsLoading}
-              className="bg-brand text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-brand-dark disabled:opacity-60"
-            >
-              {finalsLoading ? "Starting…" : "Start Finals"}
-            </button>
-          </div>
-        </div>
+      <div className="mt-4 pt-4 border-t border-border">
+        <FinalsPanel competitionId={competition.id} status={competition.status} venues={venues}
+          onStarted={() => onUpdated({ ...competition, status: "FINALS" })} />
       </div>
 
-      {actionMsg && (
-        <p className="mt-3 text-xs text-muted border-t border-border pt-2">{actionMsg}</p>
-      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStandings, getTopScorers } from "@/lib/standings";
 import { dateKey, sydneyDateKey } from "@/lib/breaks";
+import { groupRounds } from "@/lib/rounds";
 
 export const dynamic = "force-dynamic";
 
@@ -72,13 +73,8 @@ export default async function CompetitionPage({
     );
   }
 
-  // Group fixtures by round
-  const rounds = fixtures.reduce<Record<number, typeof fixtures>>((acc, f) => {
-    const key = f.round;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(f);
-    return acc;
-  }, {});
+  // Rounds in date order (finals under their own headings), with byes.
+  const rounds = groupRounds(fixtures, teams.map((ct) => ct.team));
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -142,9 +138,14 @@ export default async function CompetitionPage({
           {fixtures.length === 0 && teams.length === 0 && (
             <p className="text-muted text-sm">Team nominations for this competition are still open.</p>
           )}
-          {Object.entries(rounds).map(([round, games]) => (
-            <div key={round}>
-              <h2 className="text-sm font-bold text-muted uppercase mb-2">Round {round}</h2>
+          {rounds.map(({ key, label, date, games, byes }) => (
+            <div key={key}>
+              <h2 className="text-sm font-bold text-muted uppercase mb-2">
+                {label}
+                <span className="ml-2 font-semibold normal-case">
+                  {new Date(date).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "Australia/Sydney" })}
+                </span>
+              </h2>
               <div className="space-y-2">
                 {games.map((f) => {
                   const isLive = f.status === "LIVE";
@@ -191,6 +192,11 @@ export default async function CompetitionPage({
                   );
                 })}
               </div>
+              {byes.length > 0 && (
+                <p className="text-xs text-muted mt-1.5">
+                  <span className="font-bold uppercase">Bye:</span> {byes.map((t) => t.name).join(", ")}
+                </p>
+              )}
             </div>
           ))}
         </div>

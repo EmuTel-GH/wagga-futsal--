@@ -249,6 +249,11 @@ model Competition {
   drawMaxRounds Int?
   endDate       DateTime? @db.Date
 
+  // Planned grand final (set by "Start finals"). It's created automatically
+  // once both semi-finals have a winner; ties need an admin to pick.
+  finalsGrandFinalAt      DateTime?
+  finalsGrandFinalPitchId String?
+
   // Set on divisions created by "Split into divisions": the stage they came from.
   splitFromId String?
   splitFrom   Competition?  @relation("CompetitionSplit", fields: [splitFromId], references: [id], onDelete: SetNull)
