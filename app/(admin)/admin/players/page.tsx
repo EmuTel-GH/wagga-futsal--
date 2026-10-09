@@ -7,6 +7,7 @@ const REG_STYLE: Record<RegistrationState, string> = {
   REGISTERED: "bg-green-50 border-green-200 text-green-700",
   UNKNOWN: "bg-gray-50 border-gray-200 text-gray-600",
   UNPAID: "bg-red-50 border-red-200 text-red-700",
+  PART_PAID: "bg-amber-50 border-amber-300 text-amber-700",
   PENDING: "bg-amber-50 border-amber-300 text-amber-700",
   WITHDRAWN: "bg-gray-100 border-gray-300 text-gray-600 line-through",
 };

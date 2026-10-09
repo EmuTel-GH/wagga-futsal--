@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import FixtureRow from "./FixtureRow";
+import { groupRounds } from "@/lib/rounds";
 import GenerateDrawForm, { describeDraw, type DrawCompetition, type DrawResult } from "@/components/admin/GenerateDrawForm";
 import { breakFor, type BreakRange } from "@/lib/breakDates";
 
@@ -38,6 +39,7 @@ export default function FixturesClient({
   competitions,
   selectedCompId,
   breaks,
+  teams = [],
 }: {
   initialFixtures: Fixture[];
   referees: Referee[];
@@ -45,6 +47,8 @@ export default function FixturesClient({
   competitions: Competition[];
   selectedCompId: string;
   breaks: BreakRange[];
+  /** The selected competition's teams, to show who has the bye each round. */
+  teams?: { id: string; name: string }[];
 }) {
   const [fixtures, setFixtures] = useState<Fixture[]>(initialFixtures);
   const [drawMsg, setDrawMsg] = useState("");
@@ -124,7 +128,8 @@ export default function FixturesClient({
   };
 
   // Group by round
-  const rounds = Array.from(new Set(fixtures.map((f) => f.round))).sort((a, b) => a - b);
+  // Rounds in date order, finals under their own headings, with byes.
+  const rounds = groupRounds(fixtures, teams);
 
   const handleCompChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const url = new URL(window.location.href);
@@ -245,12 +250,20 @@ export default function FixturesClient({
             : "No fixtures found. Select a competition to generate its draw."}
         </p>
       ) : (
-        rounds.map((round) => {
-          const roundFixtures = fixtures.filter((f) => f.round === round);
-          const label = roundFixtures[0]?.phase !== "REGULAR" ? roundFixtures[0].phase.replace(/_/g, " ") : `Round ${round}`;
+        rounds.map(({ key, label, date, games: roundFixtures, byes }) => {
           return (
-            <div key={round} className="mb-6">
-              <h2 className="text-sm font-bold text-navy mb-2 uppercase tracking-wide">{label}</h2>
+            <div key={key} className="mb-6">
+              <h2 className="text-sm font-bold text-navy mb-2 uppercase tracking-wide">
+                {label}
+                <span className="ml-2 font-semibold normal-case text-muted">
+                  {new Date(date).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                </span>
+                {byes.length > 0 && (
+                  <span className="ml-3 normal-case font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 text-xs">
+                    Bye: {byes.map((t) => t.name).join(", ")}
+                  </span>
+                )}
+              </h2>
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-navy text-white">

@@ -326,9 +326,9 @@ export default function TeamRow({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId: tp.playerId, jerseyNumber }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return (await res.json().catch(() => ({}))).error ?? "Not saved";
     onUpdated({ ...team, players: team.players.map((p) => (p.playerId === tp.playerId ? { ...p, jerseyNumber } : p)) });
-    return true;
+    return null;
   };
 
   const handleRemovePlayer = async (playerId: string) => {
@@ -651,7 +651,7 @@ export default function TeamRow({
                 <thead>
                   <tr className="text-left text-muted">
                     <th className="pb-1 font-semibold">Name</th>
-                    <th className="pb-1 font-semibold w-16">#</th>
+                    <th className="pb-1 font-semibold w-36">Shirt #</th>
                     <th className="pb-1 w-12"></th>
                   </tr>
                 </thead>
@@ -1083,30 +1083,51 @@ function ExpectedItem({
   );
 }
 
-// Shirt number, click to edit (Enter/blur saves, Esc cancels, blank clears).
-function JerseyCell({ value, onSave }: { value: number | null; onSave: (n: number | null) => Promise<boolean> }) {
-  const [editing, setEditing] = useState(false);
+// Shirt number: an always-visible box (works on iPad, no hover needed).
+// Saves on Enter or when you tap away; blank clears it.
+function JerseyCell({ value, onSave }: { value: number | null; onSave: (n: number | null) => Promise<string | null> }) {
   const [text, setText] = useState(value?.toString() ?? "");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState("");
   const save = async () => {
     const n = text.trim() === "" ? null : Number(text);
-    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 999)) return;
-    if (n !== value && !(await onSave(n))) return;
-    setEditing(false);
+    if (n === value) return;
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 999)) {
+      setState("error");
+      setError("0–999");
+      return;
+    }
+    setState("saving");
+    const err = await onSave(n);
+    if (err) {
+      setState("error");
+      setError(err);
+      setText(value?.toString() ?? "");
+    } else {
+      setState("saved");
+      setError("");
+      setTimeout(() => setState("idle"), 1500);
+    }
   };
-  if (!editing) {
-    return (
-      <button onClick={() => { setText(value?.toString() ?? ""); setEditing(true); }}
-        title="Click to set the shirt number" className="hover:text-brand hover:underline min-w-[1.5rem] text-left">
-        {value ?? "—"}
-      </button>
-    );
-  }
   return (
-    <input autoFocus type="number" min={0} max={999} value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-      className="border border-border rounded px-1 py-0.5 text-xs w-14 focus:outline-none focus:ring-1 focus:ring-brand" />
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={999}
+        placeholder="#"
+        aria-label="Shirt number"
+        value={text}
+        onChange={(e) => { setText(e.target.value); setState("idle"); }}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        className={`border rounded px-1.5 py-0.5 text-xs w-14 focus:outline-none focus:ring-1 focus:ring-brand ${state === "error" ? "border-red-400" : "border-border"}`}
+      />
+      {state === "saving" && <span className="text-[10px] text-muted">…</span>}
+      {state === "saved" && <span className="text-[10px] text-green-700">✓</span>}
+      {state === "error" && <span className="text-[10px] text-red-600">{error}</span>}
+    </span>
   );
 }
 

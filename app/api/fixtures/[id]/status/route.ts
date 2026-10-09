@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireReferee } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { maybeCreateGrandFinal } from "@/lib/finals";
 const VALID_STATUSES = ["SCHEDULED", "LIVE", "COMPLETED", "FORFEITED_HOME", "FORFEITED_AWAY", "ABANDONED"] as const;
 type FixtureStatus = typeof VALID_STATUSES[number];
 
@@ -38,6 +39,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     entityId: id,
     details: { status, homeScore: fixture.homeScore, awayScore: fixture.awayScore },
   });
+
+
+  // Both semis decided? Create the planned grand final.
+  if (fixture.phase === "SEMI_FINAL") {
+    const gf = await maybeCreateGrandFinal(fixture.competitionId);
+    if (gf) {
+      await audit(session, {
+        action: "competition.finals.grand_final",
+        summary: `Grand final set: ${gf.homeTeam.name} v ${gf.awayTeam.name}`,
+        entityType: "Fixture",
+        entityId: gf.id,
+        details: { competitionId: fixture.competitionId, automatic: true },
+      });
+    }
+  }
 
   return NextResponse.json(fixture);
 }

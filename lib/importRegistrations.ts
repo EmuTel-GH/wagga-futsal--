@@ -89,9 +89,10 @@ export async function importRegistrations(csvText: string): Promise<ImportSummar
   for (const raw of data) {
     const r = normaliseKeys(raw);
 
-    const status = r["registrationstatus"] ?? r["status"] ?? "";
+    // PlayFootball's export calls it "Reg Status"; older formats "Registration status".
+    const status = r["regstatus"] ?? r["registrationstatus"] ?? r["status"] ?? "";
     // Any payment-ish column the export has ("Payment status", "Paid", "Amount owing"...).
-    const paymentKey = Object.keys(r).find((k) => /payment|paid|owing|outstanding|balance/.test(k));
+    const paymentKey = "paymentstatus" in r ? "paymentstatus" : Object.keys(r).find((k) => /payment|paid|owing|outstanding|balance/.test(k));
     const payment = paymentKey ? r[paymentKey] : "";
     // Cancelled/withdrawn rows don't create anyone, but they DO mark an
     // existing player as withdrawn, so they stop showing as registered.
