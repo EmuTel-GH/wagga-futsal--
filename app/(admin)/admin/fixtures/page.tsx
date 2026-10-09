@@ -31,7 +31,7 @@ export default async function FixturesPage({ searchParams }: Props) {
       orderBy: { name: "asc" },
     }),
     prisma.competition.findMany({
-      select: { id: true, name: true, season: true },
+      select: { id: true, name: true, season: true, ageGroup: true, drawTimesEach: true, drawMaxRounds: true, endDate: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.fixtureBreak.findMany({ orderBy: { startDate: "asc" } }),

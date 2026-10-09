@@ -219,6 +219,18 @@ model Competition {
   status    CompetitionStatus @default(REGISTRATION)
   createdAt DateTime          @default(now())
 
+  // Draw settings, remembered from the last "Generate draw" so the form
+  // starts from them. drawTimesEach null + endDate = keep cycling to the end
+  // date. endDate is also shown publicly.
+  drawTimesEach Int?
+  drawMaxRounds Int?
+  endDate       DateTime? @db.Date
+
+  // Set on divisions created by "Split into divisions": the stage they came from.
+  splitFromId String?
+  splitFrom   Competition?  @relation("CompetitionSplit", fields: [splitFromId], references: [id], onDelete: SetNull)
+  splitInto   Competition[] @relation("CompetitionSplit")
+
   timeSlots     CompetitionTimeSlot[]
   teams         CompetitionTeam[]
   fixtures      Fixture[]

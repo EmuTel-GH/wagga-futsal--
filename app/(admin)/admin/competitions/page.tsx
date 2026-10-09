@@ -10,6 +10,7 @@ export default async function CompetitionsPage() {
         timeSlots: { include: { pitch: { include: { venue: true } } } },
         teams: { include: { team: true } },
         _count: { select: { fixtures: true } },
+        splitFrom: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
     }),

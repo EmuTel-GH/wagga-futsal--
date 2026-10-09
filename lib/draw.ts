@@ -1,4 +1,4 @@
-import { breakFor, type BreakRange } from "./breakDates";
+import { breakFor, sydneyDateKey, type BreakRange } from "./breakDates";
 
 interface DrawTeam {
   id: string;
@@ -61,15 +61,25 @@ export function generateRoundRobin(teams: DrawTeam[], cycles = 2): Array<[string
 // Rounds go out one per week from startDate. A round is placed as a whole: if
 // any of its games would land in a break (holiday, Christmas...) the entire
 // round moves to the next week, so a round is never split across a break.
+// With endDate ("YYYY-MM-DD", Sydney, inclusive) scheduling stops at the first
+// round that would finish after it; `stoppedAtEndDate` says it was cut short.
 export function scheduleFixtures(
   competitionId: string,
   rounds: Array<[string, string][]>,
   slots: DrawSlot[],
   startDate: Date,
-  breaks: BreakRange[] = []
-): { fixtures: Fixture[]; skipped: { date: Date; breakName: string }[] } {
+  breaks: BreakRange[] = [],
+  opts: { endDate?: string | null } = {}
+): {
+  fixtures: Fixture[];
+  skipped: { date: Date; breakName: string }[];
+  roundsPlaced: number;
+  stoppedAtEndDate: boolean;
+} {
   const fixtures: Fixture[] = [];
   const skipped: { date: Date; breakName: string }[] = [];
+  let roundsPlaced = 0;
+  let stoppedAtEndDate = false;
   let slotIndex = 0;
   let currentDate = new Date(startDate);
 
@@ -105,11 +115,20 @@ export function scheduleFixtures(
       games = plan(pairs, currentDate);
     }
 
+    // Weeks skipped for breaks only count if the round then fits.
+    const lastDay = sydneyDateKey(games[games.length - 1].gameDate);
+    if (opts.endDate && lastDay > opts.endDate) {
+      while (skipped.length && sydneyDateKey(skipped[skipped.length - 1].date) > opts.endDate) skipped.pop();
+      stoppedAtEndDate = true;
+      break;
+    }
+    roundsPlaced++;
+
     for (const { pair, slot, gameDate } of games) {
       fixtures.push({
         homeTeamId: pair[0],
         awayTeamId: pair[1],
-        round: roundIdx + 1,
+        round: roundsPlaced,
         pitchId: slot.pitchId,
         scheduledAt: gameDate,
       });
@@ -121,7 +140,7 @@ export function scheduleFixtures(
     currentDate.setDate(currentDate.getDate() + 7);
   }
 
-  return { fixtures, skipped };
+  return { fixtures, skipped, roundsPlaced, stoppedAtEndDate };
 }
 
 // Generate finals fixtures from top 4 teams
