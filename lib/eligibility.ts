@@ -178,6 +178,8 @@ export type ReviewPlayer = {
   dateOfBirth: Date | string;
   gender: Gender;
   registeredAgeGroup: AgeGroup | null;
+  pfStatus?: string | null;
+  pfPaymentStatus?: string | null;
 };
 export type ReviewDispensation = { playerId: string; competitionId: string; type: DispensationType };
 export type ReviewCompetition = { id: string; ageGroup: AgeGroup; gender: Gender; name?: string };

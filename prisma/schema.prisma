@@ -92,6 +92,12 @@ model Player {
   // The age group the player registered in (from PlayFootball import; rule 7.2).
   // Eligibility to play in a competition is derived from this — see lib/eligibility.ts.
   registeredAgeGroup AgeGroup?
+  // From the latest PlayFootball import: the raw "Registration status" (and
+  // payment status, if the export has one), so unpaid / incomplete /
+  // withdrawn registrations show as such rather than as "registered".
+  pfStatus           String?
+  pfPaymentStatus    String?
+  pfImportedAt       DateTime?
   createdAt          DateTime  @default(now())
 
   teamPlayers   TeamPlayer[]
@@ -127,10 +133,27 @@ model TeamOfficial {
   lastName       String
   role           OfficialRole
   playFootballId String?      @unique
+  // Legacy single-team link, superseded by TeamOfficialAssignment (coaches can
+  // now be on several teams). Kept so older app versions still run; not written.
   teamId         String?
   createdAt      DateTime     @default(now())
 
-  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  legacyTeam  Team?                    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  assignments TeamOfficialAssignment[]
+}
+
+// A coach/manager on a team. One official can be on several teams
+// (rules 1.3–1.4 only need each team to have one).
+model TeamOfficialAssignment {
+  id         String   @id @default(cuid())
+  teamId     String
+  officialId String
+  createdAt  DateTime @default(now())
+
+  team     Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  official TeamOfficial @relation(fields: [officialId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, officialId])
 }
 
 enum OfficialRole {
@@ -285,13 +308,14 @@ model Team {
   status       TeamStatus @default(APPROVED)
   createdAt    DateTime   @default(now())
 
-  players      TeamPlayer[]
-  officials    TeamOfficial[]
-  expected     ExpectedPlayer[]
-  competitions CompetitionTeam[]
-  homeFixtures Fixture[]         @relation("HomeTeam")
-  awayFixtures Fixture[]         @relation("AwayTeam")
-  events       MatchEvent[]
+  players             TeamPlayer[]
+  legacyOfficials     TeamOfficial[]
+  officialAssignments TeamOfficialAssignment[]
+  expected            ExpectedPlayer[]
+  competitions        CompetitionTeam[]
+  homeFixtures        Fixture[]                @relation("HomeTeam")
+  awayFixtures        Fixture[]                @relation("AwayTeam")
+  events              MatchEvent[]
 }
 
 enum TeamStatus {
