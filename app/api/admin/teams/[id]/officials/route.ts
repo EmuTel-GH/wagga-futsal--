@@ -6,7 +6,7 @@ import { audit } from "@/lib/audit";
 type Params = { params: Promise<{ id: string }> };
 
 // Assign a registered coach/manager to this team (rules 1.3–1.4: every team
-// needs an over-18 registered official).
+// needs an over-18 registered official). An official can be on several teams.
 export async function POST(req: Request, { params }: Params) {
   let session;
   try {
@@ -21,9 +21,12 @@ export async function POST(req: Request, { params }: Params) {
     return NextResponse.json({ error: "officialId is required" }, { status: 400 });
   }
 
-  const official = await prisma.teamOfficial.update({
-    where: { id: officialId },
-    data: { teamId },
+  const official = await prisma.teamOfficial.findUnique({ where: { id: officialId } });
+  if (!official) return NextResponse.json({ error: "Coach/manager not found" }, { status: 404 });
+  await prisma.teamOfficialAssignment.upsert({
+    where: { teamId_officialId: { teamId, officialId } },
+    update: {},
+    create: { teamId, officialId },
   });
 
   const team = await prisma.team.findUnique({ where: { id: teamId }, select: { name: true } });
@@ -57,10 +60,7 @@ export async function DELETE(req: Request, { params }: Params) {
     prisma.teamOfficial.findUnique({ where: { id: officialId } }),
     prisma.team.findUnique({ where: { id: teamId }, select: { name: true } }),
   ]);
-  await prisma.teamOfficial.updateMany({
-    where: { id: officialId, teamId },
-    data: { teamId: null },
-  });
+  await prisma.teamOfficialAssignment.deleteMany({ where: { officialId, teamId } });
   await audit(session, {
     action: "team.official.remove",
     summary: `Removed ${official ? `${official.firstName} ${official.lastName}` : "official"} from ${team?.name ?? "team"}`,

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { Competition, Venue } from "./CompetitionsClient";
+import GenerateDrawForm, { describeDraw } from "@/components/admin/GenerateDrawForm";
+import SplitPanel from "./SplitPanel";
 
 const STATUS_COLOURS: Record<string, string> = {
   REGISTRATION: "bg-blue-100 text-blue-700",
@@ -23,10 +25,8 @@ export default function CompetitionCard({
   onUpdated: (c: Competition) => void;
   onDeleted: (id: string) => void;
 }) {
-  const [drawDate, setDrawDate] = useState("");
   const [finalsDate, setFinalsDate] = useState("");
   const [finalsPitch, setFinalsPitch] = useState(venues[0]?.pitches[0]?.id ?? "");
-  const [drawLoading, setDrawLoading] = useState(false);
   const [finalsLoading, setFinalsLoading] = useState(false);
   const [slotForm, setSlotForm] = useState({
     pitchId: venues[0]?.pitches[0]?.id ?? "",
@@ -59,20 +59,8 @@ export default function CompetitionCard({
     onDeleted(competition.id);
   };
 
-  const handleGenerateDraw = async () => {
-    if (!drawDate) { setActionMsg("Enter a start date first"); return; }
-    setDrawLoading(true);
-    setActionMsg("");
-    const res = await fetch("/api/admin/draw", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitionId: competition.id, startDate: drawDate }),
-    });
-    const data = await res.json();
-    setDrawLoading(false);
-    setActionMsg(res.ok ? `Draw generated: ${data.fixtures} fixtures across ${data.rounds} rounds` : data.error);
-    if (res.ok) onUpdated({ ...competition, status: "ACTIVE" });
-  };
+  const [drawMsg, setDrawMsg] = useState("");
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const handleStartFinals = async () => {
     if (!finalsDate || !finalsPitch) { setActionMsg("Enter finals date and pitch"); return; }
@@ -121,6 +109,7 @@ export default function CompetitionCard({
           <h2 className="text-lg font-bold text-navy">{competition.name}</h2>
           <p className="text-xs text-muted mt-0.5">
             {competition.season} · {competition.ageGroup} · {competition.gender}
+            {competition.splitFrom && <> · split from {competition.splitFrom.name}</>}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -238,26 +227,42 @@ export default function CompetitionCard({
         </form>
       </div>
 
-      {/* Draw & Finals */}
-      <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Generate Draw</p>
-          <div className="flex gap-2 items-center">
-            <input
-              type="date"
-              value={drawDate}
-              onChange={(e) => setDrawDate(e.target.value)}
-              className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
-            />
-            <button
-              onClick={handleGenerateDraw}
-              disabled={drawLoading}
-              className="bg-brand text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-brand-dark disabled:opacity-60"
-            >
-              {drawLoading ? "Generating…" : "Generate Draw"}
-            </button>
-          </div>
+      {/* Draw */}
+      {competition.status !== "COMPLETED" && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Generate draw</p>
+          <GenerateDrawForm
+            competition={competition}
+            onGenerated={(d) => {
+              setDrawMsg(describeDraw(d) + " Review and publish it on the Fixtures page.");
+              onUpdated({ ...competition, _count: { fixtures: d.fixtures } });
+            }}
+          />
+          {drawMsg && <p className="mt-2 text-xs text-green-800 bg-green-50 border border-green-200 rounded px-2 py-1.5">{drawMsg}</p>}
         </div>
+      )}
+
+      {/* Split */}
+      {competition.status !== "COMPLETED" && competition.teams.length >= 4 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          {!splitOpen ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={() => setSplitOpen(true)}
+                className="border border-brand text-brand px-3 py-1.5 rounded text-sm font-semibold hover:bg-brand/5">
+                Split into divisions…
+              </button>
+              <p className="text-[11px] text-muted">
+                e.g. after everyone has played each other once: top half and bottom half get new divisions and new fixtures.
+              </p>
+            </div>
+          ) : (
+            <SplitPanel competitionId={competition.id} onClose={() => setSplitOpen(false)} />
+          )}
+        </div>
+      )}
+
+      {/* Finals */}
+      <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Start Finals</p>
           <div className="flex flex-wrap gap-2 items-center">

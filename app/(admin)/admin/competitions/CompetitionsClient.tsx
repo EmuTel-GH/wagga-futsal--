@@ -25,6 +25,10 @@ export type Competition = {
   timeSlots: TimeSlot[];
   teams: CompetitionTeam[];
   _count: { fixtures: number };
+  drawTimesEach: number | null;
+  drawMaxRounds: number | null;
+  endDate: Date | string | null;
+  splitFrom?: { name: string } | null;
 };
 export type Venue = { id: string; name: string; pitches: VenuePitch[] };
 

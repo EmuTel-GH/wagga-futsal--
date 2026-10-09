@@ -124,3 +124,43 @@ export async function addPlayerToTeam(
 
   return { ok: true, teamPlayer, dispensations: recorded };
 }
+
+/**
+ * Which of a team's players would break the rules in `competitionId`: age
+ * eligibility (7.2/7.4/7.5, honouring that competition's dispensations) and
+ * rule 22.1 (already in another team in that competition). Used when moving
+ * a team to another competition (re-grading).
+ */
+export async function rosterProblems(teamId: string, competitionId: string) {
+  const [competition, roster] = await Promise.all([
+    prisma.competition.findUnique({ where: { id: competitionId } }),
+    prisma.teamPlayer.findMany({
+      where: { teamId },
+      include: {
+        player: {
+          include: {
+            dispensations: { where: { competitionId } },
+            teamPlayers: { where: { teamId: { not: teamId }, team: { competitions: { some: { competitionId } } } }, include: { team: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
+  ]);
+  if (!competition) return { competition: null, problems: [] };
+  const problems: { playerId: string; name: string; reason: string; result: EligibilityResult | null }[] = [];
+  for (const { player } of roster) {
+    const name = `${player.firstName} ${player.lastName}`;
+    const result = checkEligibility({
+      dateOfBirth: player.dateOfBirth,
+      gender: player.gender,
+      registeredAgeGroup: player.registeredAgeGroup,
+      competition,
+      dispensation: player.dispensations[0] ?? null,
+    });
+    if (!result.eligible) problems.push({ playerId: player.id, name, reason: result.reason, result });
+    for (const other of player.teamPlayers) {
+      problems.push({ playerId: player.id, name, reason: `already plays for ${other.team.name} in ${competition.name} (rule 22.1)`, result: null });
+    }
+  }
+  return { competition, problems };
+}

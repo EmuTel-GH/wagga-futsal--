@@ -29,7 +29,7 @@ export async function POST(req: Request, { params }: Params) {
   const [source, target] = await Promise.all([
     prisma.team.findUnique({
       where: { id: sourceId },
-      include: { expected: true, players: true, officials: true },
+      include: { expected: true, players: true, officialAssignments: true },
     }),
     prisma.team.findUnique({
       where: { id: targetTeamId },
@@ -89,7 +89,15 @@ export async function POST(req: Request, { params }: Params) {
         });
       }
     }
-    await tx.teamOfficial.updateMany({ where: { teamId: source.id }, data: { teamId: target.id } });
+    const targetOfficials = new Set(
+      (await tx.teamOfficialAssignment.findMany({ where: { teamId: target.id } })).map((a) => a.officialId)
+    );
+    const newOfficials = source.officialAssignments.filter((a) => !targetOfficials.has(a.officialId));
+    if (newOfficials.length) {
+      await tx.teamOfficialAssignment.createMany({
+        data: newOfficials.map((a) => ({ teamId: target.id, officialId: a.officialId })),
+      });
+    }
 
     // Deleting the source cascades its roster, expected list and comp link.
     await tx.team.delete({ where: { id: source.id } });

@@ -17,14 +17,14 @@ export default async function TeamsPage() {
           include: { player: true },
           orderBy: { jerseyNumber: "asc" },
         },
-        officials: { orderBy: { lastName: "asc" } },
+        officialAssignments: { include: { official: true } },
         expected: { orderBy: { createdAt: "asc" } },
       },
       orderBy: { name: "asc" },
     }),
     // DOB/gender/registered group feed the eligibility flags on expected squads.
     prisma.player.findMany({
-      select: { id: true, firstName: true, lastName: true, dateOfBirth: true, gender: true, registeredAgeGroup: true },
+      select: { id: true, firstName: true, lastName: true, dateOfBirth: true, gender: true, registeredAgeGroup: true, pfStatus: true, pfPaymentStatus: true },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
     prisma.competition.findMany({
@@ -33,7 +33,7 @@ export default async function TeamsPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.teamOfficial.findMany({
-      select: { id: true, firstName: true, lastName: true, role: true, teamId: true },
+      select: { id: true, firstName: true, lastName: true, role: true, assignments: { select: { team: { select: { id: true, name: true } } } } },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
     prisma.dispensation.findMany({
@@ -41,14 +41,24 @@ export default async function TeamsPage() {
     }),
   ]);
 
+  // Coaches/managers can be on several teams: flatten the assignments into the
+  // shapes the client uses (team.officials, and each official's team names).
+  const teamsForClient = teams.map(({ officialAssignments, ...t }) => ({
+    ...t,
+    officials: officialAssignments
+      .map((a) => a.official)
+      .sort((a, b) => a.lastName.localeCompare(b.lastName)),
+  }));
+  const officialsForClient = allOfficials.map(({ assignments, ...o }) => ({ ...o, teams: assignments.map((a) => a.team) }));
+
   return (
     <div>
       <h1 className="text-2xl font-black text-navy mb-6">Teams</h1>
       <TeamsClient
-        initialTeams={teams}
+        initialTeams={teamsForClient}
         allPlayers={allPlayers}
         allCompetitions={allCompetitions}
-        allOfficials={allOfficials}
+        allOfficials={officialsForClient}
         initialDispensations={dispensations}
         canOverride={hasPermission(session.user, "OVERRIDE_RULES")}
       />

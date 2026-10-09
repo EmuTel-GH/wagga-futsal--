@@ -1,6 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { registrationState, REGISTRATION_LABEL, isProblem, type RegistrationState } from "@/lib/registrationStatus";
+
+const REG_STYLE: Record<RegistrationState, string> = {
+  REGISTERED: "bg-green-50 border-green-200 text-green-700",
+  UNKNOWN: "bg-gray-50 border-gray-200 text-gray-600",
+  UNPAID: "bg-red-50 border-red-200 text-red-700",
+  PENDING: "bg-amber-50 border-amber-300 text-amber-700",
+  WITHDRAWN: "bg-gray-100 border-gray-300 text-gray-600 line-through",
+};
 
 type Player = {
   id: string;
@@ -10,11 +19,15 @@ type Player = {
   gender: string;
   playFootballId: string | null;
   registeredAgeGroup: string | null;
+  pfStatus: string | null;
+  pfPaymentStatus: string | null;
   teamPlayers?: { isPrimary: boolean; team: { name: string } }[];
 };
 
 type ImportSummary = {
   players: number;
+  unpaidOrPending?: number;
+  withdrawn?: number;
   officials: number;
   referees: number;
   skipped: number;
@@ -27,6 +40,7 @@ export default function PlayersAdmin() {
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [search, setSearch] = useState("");
   const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [problemsOnly, setProblemsOnly] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/players?" + new URLSearchParams({ q: search, unassigned: unassignedOnly ? "1" : "" }))
@@ -75,6 +89,8 @@ export default function PlayersAdmin() {
           <p className="font-semibold">
             Imported {importResult.players} players, {importResult.officials} coaches/managers,{" "}
             {importResult.referees} referees{importResult.skipped > 0 ? ` · ${importResult.skipped} skipped` : ""}.
+            {!!importResult.unpaidOrPending && ` ${importResult.unpaidOrPending} player registrations are unpaid or incomplete.`}
+            {!!importResult.withdrawn && ` ${importResult.withdrawn} existing players marked withdrawn.`}
           </p>
           {importResult.errors?.length > 0 && (
             <ul className="mt-2 space-y-0.5 text-amber-800 list-disc list-inside">
@@ -103,6 +119,15 @@ export default function PlayersAdmin() {
           />
           Unassigned only
         </label>
+        <label className="flex items-center gap-2 text-sm text-navy font-medium whitespace-nowrap cursor-pointer">
+          <input
+            type="checkbox"
+            checked={problemsOnly}
+            onChange={(e) => setProblemsOnly(e.target.checked)}
+            className="accent-[#E91E8C]"
+          />
+          Unpaid / incomplete only
+        </label>
       </div>
 
       <div className="bg-white border border-border rounded-xl overflow-hidden">
@@ -112,13 +137,16 @@ export default function PlayersAdmin() {
               <th className="px-4 py-3 text-left font-semibold">Name</th>
               <th className="px-4 py-3 text-left font-semibold">DOB</th>
               <th className="px-4 py-3 text-left font-semibold">Age Group</th>
+              <th className="px-4 py-3 text-left font-semibold">Registration</th>
               <th className="px-4 py-3 text-left font-semibold">Gender</th>
               <th className="px-4 py-3 text-left font-semibold">Team(s)</th>
               <th className="px-4 py-3 text-left font-semibold">FFA Number</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {players.map((p) => (
+            {players
+              .filter((p) => !problemsOnly || isProblem(registrationState(p.pfStatus, p.pfPaymentStatus)))
+              .map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-semibold">{p.firstName} {p.lastName}</td>
                 <td className="px-4 py-2.5 text-muted">{new Date(p.dateOfBirth).toLocaleDateString("en-AU")}</td>
@@ -126,6 +154,19 @@ export default function PlayersAdmin() {
                   <span className="text-xs font-bold bg-navy/10 text-navy px-2 py-0.5 rounded-full">
                     {p.registeredAgeGroup ?? "—"}
                   </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  {(() => {
+                    const st = registrationState(p.pfStatus, p.pfPaymentStatus);
+                    return (
+                      <span
+                        title={[p.pfStatus && `PlayFootball: ${p.pfStatus}`, p.pfPaymentStatus && `Payment: ${p.pfPaymentStatus}`].filter(Boolean).join(" · ") || "Imported before statuses were recorded"}
+                        className={`text-xs font-bold border px-2 py-0.5 rounded-full ${REG_STYLE[st]}`}
+                      >
+                        {REGISTRATION_LABEL[st]}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-4 py-2.5 text-muted capitalize">{p.gender.toLowerCase()}</td>
                 <td className="px-4 py-2.5 text-xs">

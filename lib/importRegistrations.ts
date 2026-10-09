@@ -2,6 +2,7 @@ import { parse } from "papaparse";
 import type { Gender, OfficialRole } from "@prisma/client";
 import { prisma } from "./prisma";
 import { defaultRegisteredGroup } from "./eligibility";
+import { registrationState } from "./registrationStatus";
 
 /**
  * PlayFootball registration import — THE way players, team officials and
@@ -20,6 +21,10 @@ import { defaultRegisteredGroup } from "./eligibility";
 
 export interface ImportSummary {
   players: number;
+  /** Players imported whose registration is unpaid or incomplete. */
+  unpaidOrPending: number;
+  /** Existing players marked withdrawn by a cancelled/withdrawn row. */
+  withdrawn: number;
   officials: number;
   referees: number;
   skipped: number;
@@ -76,7 +81,7 @@ export async function importRegistrations(csvText: string): Promise<ImportSummar
     skipEmptyLines: true,
   });
 
-  const summary: ImportSummary = { players: 0, officials: 0, referees: 0, skipped: 0, errors: [] };
+  const summary: ImportSummary = { players: 0, unpaidOrPending: 0, withdrawn: 0, officials: 0, referees: 0, skipped: 0, errors: [] };
   if (parseErrs.length > 0) {
     summary.errors.push(...parseErrs.slice(0, 5).map((e) => `CSV parse: ${e.message} (row ${e.row})`));
   }
@@ -84,11 +89,14 @@ export async function importRegistrations(csvText: string): Promise<ImportSummar
   for (const raw of data) {
     const r = normaliseKeys(raw);
 
-    const status = r["registrationstatus"] ?? "";
-    if (/cancel|declin|withdraw/i.test(status)) {
-      summary.skipped++;
-      continue;
-    }
+    const status = r["registrationstatus"] ?? r["status"] ?? "";
+    // Any payment-ish column the export has ("Payment status", "Paid", "Amount owing"...).
+    const paymentKey = Object.keys(r).find((k) => /payment|paid|owing|outstanding|balance/.test(k));
+    const payment = paymentKey ? r[paymentKey] : "";
+    // Cancelled/withdrawn rows don't create anyone, but they DO mark an
+    // existing player as withdrawn, so they stop showing as registered.
+    const withdrawn = registrationState(status) === "WITHDRAWN";
+    const pf = { pfStatus: status || null, pfPaymentStatus: payment || null, pfImportedAt: new Date() };
 
     const name = r["participantname"]
       ? splitName(r["participantname"])
@@ -105,6 +113,11 @@ export async function importRegistrations(csvText: string): Promise<ImportSummar
     }
 
     const what = classify(r["productname"] ?? r["product"] ?? r["role"] ?? "");
+    // Withdrawn coaches/referees are simply not imported (as before).
+    if (withdrawn && what.kind !== "player") {
+      summary.skipped++;
+      continue;
+    }
 
     try {
       if (what.kind === "unknown") {
@@ -116,13 +129,24 @@ export async function importRegistrations(csvText: string): Promise<ImportSummar
           summary.skipped++;
           continue;
         }
+        if (withdrawn) {
+          const match = ffa
+            ? await prisma.player.findUnique({ where: { playFootballId: ffa } })
+            : await prisma.player.findFirst({ where: { firstName: name.firstName, lastName: name.lastName, dateOfBirth: dob } });
+          if (match) {
+            await prisma.player.update({ where: { id: match.id }, data: pf });
+            summary.withdrawn++;
+          } else summary.skipped++;
+          continue;
+        }
         const registeredAgeGroup = what.senior ? "OPENS" : defaultRegisteredGroup(dob);
         if (!registeredAgeGroup) {
           summary.errors.push(`${label}: DOB ${dob.toISOString().slice(0, 10)} fits no age band (rule 1.1) — skipped.`);
           summary.skipped++;
           continue;
         }
-        const values = { ...name, dateOfBirth: dob, gender, registeredAgeGroup };
+        const values = { ...name, dateOfBirth: dob, gender, registeredAgeGroup, ...pf };
+        if (registrationState(status, payment) !== "REGISTERED" && registrationState(status, payment) !== "UNKNOWN") summary.unpaidOrPending++;
         if (ffa) {
           await prisma.player.upsert({
             where: { playFootballId: ffa },

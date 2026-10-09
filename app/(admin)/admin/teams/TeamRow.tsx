@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { reviewExpected, type ExpectedReview } from "@/lib/eligibility";
+import { registrationState, REGISTRATION_LABEL, isProblem } from "@/lib/registrationStatus";
 
 type AgeGroup = "U5" | "U6" | "U7" | "U8" | "U9" | "U10" | "U11" | "U12" | "U14" | "U16" | "U19" | "OPENS" | "SOCIAL";
 type Gender = "MALE" | "FEMALE" | "MIXED";
@@ -14,6 +15,8 @@ export type Player = {
   dateOfBirth: Date | string;
   gender: Gender;
   registeredAgeGroup: AgeGroup | null;
+  pfStatus?: string | null;
+  pfPaymentStatus?: string | null;
 };
 export type Dispensation = {
   id: string;
@@ -52,7 +55,8 @@ export type Team = {
 };
 
 type Competition = { id: string; name: string; season: string };
-type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
+// An official can coach/manage several teams; `teams` lists them all.
+type Official = { id: string; firstName: string; lastName: string; role: string; teams?: { id: string; name: string }[] };
 type Expected = {
   id: string;
   firstName: string;
@@ -131,6 +135,7 @@ function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
+    name: team.name,
     contactName: team.contactName ?? "",
     contactEmail: team.contactEmail ?? "",
     contactPhone: team.contactPhone ?? "",
@@ -149,7 +154,9 @@ function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => 
     setSaving(false);
     if (!res.ok) return;
     const updated = await res.json();
-    onUpdated({ ...team, ...updated });
+    // Keep the richer competitions/players/officials already on the client.
+    onUpdated({ ...team, name: updated.name, contactName: updated.contactName, contactEmail: updated.contactEmail,
+      contactPhone: updated.contactPhone, kitShirt: updated.kitShirt, kitShorts: updated.kitShorts, kitSocks: updated.kitSocks });
     setEditing(false);
   };
 
@@ -183,6 +190,7 @@ function TeamDetails({ team, onUpdated }: { team: Team; onUpdated: (t: Team) => 
   return (
     <div className="mt-2 bg-white border border-border rounded-lg p-3">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+        {field("name", "Team name")}
         {field("contactName", "Contact name")}
         {field("contactEmail", "Contact email")}
         {field("contactPhone", "Contact phone")}
@@ -229,7 +237,6 @@ export default function TeamRow({
   const [expanded, setExpanded] = useState(false);
   const [addPlayerForm, setAddPlayerForm] = useState({ playerId: "", jerseyNumber: "" });
   const [playerQuery, setPlayerQuery] = useState("");
-  const [addCompForm, setAddCompForm] = useState(allCompetitions[0]?.id ?? "");
   const [playerSaving, setPlayerSaving] = useState(false);
   const [compSaving, setCompSaving] = useState(false);
   const [playerError, setPlayerError] = useState("");
@@ -311,6 +318,17 @@ export default function TeamRow({
       ...team,
       players: team.players.map((p) => (p.playerId === tp.playerId ? { ...p, ...updated } : p)),
     });
+  };
+
+  const handleJersey = async (tp: TeamPlayer, jerseyNumber: number | null) => {
+    const res = await fetch(`/api/admin/teams/${team.id}/players`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: tp.playerId, jerseyNumber }),
+    });
+    if (!res.ok) return false;
+    onUpdated({ ...team, players: team.players.map((p) => (p.playerId === tp.playerId ? { ...p, jerseyNumber } : p)) });
+    return true;
   };
 
   const handleRemovePlayer = async (playerId: string) => {
@@ -474,25 +492,56 @@ export default function TeamRow({
     onUpdated({ ...team, officials: (team.officials ?? []).filter((o) => o.id !== id) });
   };
 
-  const handleAddToComp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addCompForm) return;
+  // Move the team to another competition (re-grade), or take it out of its
+  // competition. Rule blocks can be overridden with a reason.
+  const [compTarget, setCompTarget] = useState("");
+  const [compNotice, setCompNotice] = useState("");
+  const [compBlocked, setCompBlocked] = useState<{ target: string; message: string } | null>(null);
+  const moveTeam = async (target: string, overrideReason?: string) => {
+    const current = team.competitions[0]?.competition;
+    const dest = allCompetitions.find((c) => c.id === target);
+    if (!overrideReason && !confirm(
+      target
+        ? `Move ${team.name} from ${current?.name ?? "no competition"} to ${dest?.name}? Its unplayed fixtures in ${current?.name ?? "its old competition"} are removed; regenerate both draws afterwards.`
+        : `Remove ${team.name} from ${current?.name}? Its unplayed fixtures there are removed (played results are kept).`
+    )) return;
     setCompSaving(true);
     setCompError("");
+    setCompNotice("");
     const res = await fetch(`/api/admin/teams/${team.id}/competitions`, {
-      method: "POST",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitionId: addCompForm }),
+      body: JSON.stringify({ competitionId: target || null, ...(overrideReason ? { override: { reason: overrideReason } } : {}) }),
     });
     const data = await res.json();
     setCompSaving(false);
-    if (!res.ok) { setCompError(data.error ?? "Failed"); return; }
-    onUpdated({ ...team, competitions: [...team.competitions, data] });
+    if (!res.ok) {
+      if (res.status === 409 && data.overridable && !overrideReason) return setCompBlocked({ target, message: data.error });
+      return setCompError(data.error ?? "Failed");
+    }
+    setCompBlocked(null);
+    setCompTarget("");
+    if (data.dispensations?.length) onDispensations(data.dispensations);
+    onUpdated({ ...team, competitions: data.competitionTeam ? [data.competitionTeam] : [] });
+    setCompNotice(
+      (data.competitionTeam ? `Moved to ${data.competitionTeam.competition.name}.` : `Removed from ${data.from?.name}.`) +
+        (data.removedFixtures ? ` ${data.removedFixtures} unplayed fixtures removed from ${data.from?.name}: regenerate its draw${data.competitionTeam ? ` and ${data.competitionTeam.competition.name}'s` : ""}.` : "")
+    );
   };
 
+  const [deleteError, setDeleteError] = useState("");
   const handleDelete = async () => {
     if (!confirm(`Delete team "${team.name}"?`)) return;
-    await fetch(`/api/admin/teams/${team.id}`, { method: "DELETE" });
+    setDeleteError("");
+    let res = await fetch(`/api/admin/teams/${team.id}`, { method: "DELETE" });
+    let data = await res.json();
+    // The team has unplayed fixtures: explain and ask again before removing them too.
+    if (res.status === 409 && data.needsConfirm) {
+      if (!confirm(`${data.error}\n\nDelete the team and those fixtures?`)) return;
+      res = await fetch(`/api/admin/teams/${team.id}?confirm=1`, { method: "DELETE" });
+      data = await res.json();
+    }
+    if (!res.ok) return setDeleteError(data.error ?? "Couldn't delete the team");
     onDeleted(team.id);
   };
 
@@ -502,6 +551,7 @@ export default function TeamRow({
   const availableComps = allCompetitions.filter(
     (c) => !team.competitions.some((tc) => tc.competition.id === c.id)
   );
+  const currentComp = team.competitions[0]?.competition ?? null;
 
   return (
     <div className="border-b border-border last:border-b-0">
@@ -536,6 +586,7 @@ export default function TeamRow({
         </div>
       </div>
 
+      {deleteError && <p className="px-4 pb-2 text-xs text-red-600">{deleteError}</p>}
       {expanded && (
         <div className="px-4 pb-4 bg-gray-50 border-t border-border">
           {/* Pending nomination: approve or merge */}
@@ -609,6 +660,7 @@ export default function TeamRow({
                     <tr key={tp.id}>
                       <td className="py-1">
                         {tp.player.firstName} {tp.player.lastName}
+                        <RegistrationBadge player={tp.player} />
                         {(() => {
                           const d = dispensationFor(tp.playerId);
                           return d ? (
@@ -634,7 +686,9 @@ export default function TeamRow({
                           </button>
                         )}
                       </td>
-                      <td className="py-1 text-muted">{tp.jerseyNumber ?? "—"}</td>
+                      <td className="py-1 text-muted">
+                        <JerseyCell value={tp.jerseyNumber} onSave={(n) => handleJersey(tp, n)} />
+                      </td>
                       <td className="py-1">
                         <button
                           onClick={() => handleRemovePlayer(tp.playerId)}
@@ -823,7 +877,7 @@ export default function TeamRow({
                 ))}
               </ul>
             )}
-            {allOfficials.some((o) => !o.teamId) && (
+            {allOfficials.some((o) => !(team.officials ?? []).some((x) => x.id === o.id)) && (
               <form onSubmit={handleAddOfficial} className="flex gap-2 items-center flex-wrap">
                 <select
                   value={officialId}
@@ -831,9 +885,10 @@ export default function TeamRow({
                   className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
                 >
                   <option value="">Select coach/manager…</option>
-                  {allOfficials.filter((o) => !o.teamId).map((o) => (
+                  {allOfficials.filter((o) => !(team.officials ?? []).some((x) => x.id === o.id)).map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.firstName} {o.lastName} ({o.role.toLowerCase()})
+                      {o.teams?.length ? ` · also ${o.teams.map((t) => t.name).join(", ")}` : ""}
                     </option>
                   ))}
                 </select>
@@ -845,28 +900,50 @@ export default function TeamRow({
             )}
           </div>
 
-          {/* Add to competition */}
-          {availableComps.length > 0 && (
-            <div className="mt-4">
-              <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Add to Competition</p>
-              <form onSubmit={handleAddToComp} className="flex gap-2 items-center flex-wrap">
-                <select
-                  value={addCompForm}
-                  onChange={(e) => setAddCompForm(e.target.value)}
-                  className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
-                >
-                  {availableComps.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.season})</option>
-                  ))}
-                </select>
-                <button type="submit" disabled={compSaving}
-                  className="bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
-                  {compSaving ? "Adding…" : "Add to Competition"}
+          {/* Competition: move (re-grade) or remove */}
+          <div className="mt-4">
+            <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Competition</p>
+            <div className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-navy font-semibold">{currentComp ? currentComp.name : <span className="text-amber-700">Not in a competition</span>}</span>
+              {availableComps.length > 0 && (
+                <>
+                  <select
+                    value={compTarget}
+                    onChange={(e) => { setCompTarget(e.target.value); setCompBlocked(null); }}
+                    className="border border-border rounded px-2 py-1.5 text-xs focus:outline-none"
+                  >
+                    <option value="">{currentComp ? "Move to…" : "Add to…"}</option>
+                    {availableComps.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.season})</option>
+                    ))}
+                  </select>
+                  <button onClick={() => moveTeam(compTarget)} disabled={compSaving || !compTarget}
+                    className="bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60">
+                    {compSaving ? "Saving…" : currentComp ? "Move" : "Add"}
+                  </button>
+                </>
+              )}
+              {currentComp && (
+                <button onClick={() => moveTeam("")} disabled={compSaving}
+                  className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60">
+                  Remove from {currentComp.name}
                 </button>
-                {compError && <span className="text-xs text-red-600">{compError}</span>}
-              </form>
+              )}
             </div>
-          )}
+            {compBlocked && (
+              <ReasonPrompt
+                message={`${compBlocked.message} You can move the team anyway.`}
+                confirmLabel="Move anyway"
+                tone="approve"
+                required
+                busy={compSaving}
+                onConfirm={(reason) => moveTeam(compBlocked.target, reason)}
+                onCancel={() => setCompBlocked(null)}
+              />
+            )}
+            {compError && <p className="text-xs text-red-600 mt-1">{compError}</p>}
+            {compNotice && <p className="text-xs text-green-800 mt-1">{compNotice}</p>}
+          </div>
         </div>
       )}
     </div>
@@ -934,7 +1011,13 @@ function ExpectedItem({
         )}
         {review.state === "ELIGIBLE" && (
           <>
-            <span className={`${pill} text-amber-700 bg-amber-50 border-amber-200`}>registered — not in team</span>
+            {isProblem(registrationState(review.player.pfStatus, review.player.pfPaymentStatus)) ? (
+              <span className={`${pill} text-red-700 bg-red-50 border-red-200`} title={review.player.pfStatus ?? undefined}>
+                {REGISTRATION_LABEL[registrationState(review.player.pfStatus, review.player.pfPaymentStatus)]} — not in team
+              </span>
+            ) : (
+              <span className={`${pill} text-amber-700 bg-amber-50 border-amber-200`}>registered — not in team</span>
+            )}
             {dispensation && (
               <span className={`${pill} text-amber-700 bg-amber-50 border-amber-300`} title={dispensation.note ?? undefined}>
                 {DISPENSATION_LABEL[dispensation.type]} · {dispensation.approvedBy}
@@ -997,5 +1080,44 @@ function ExpectedItem({
         />
       )}
     </li>
+  );
+}
+
+// Shirt number, click to edit (Enter/blur saves, Esc cancels, blank clears).
+function JerseyCell({ value, onSave }: { value: number | null; onSave: (n: number | null) => Promise<boolean> }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value?.toString() ?? "");
+  const save = async () => {
+    const n = text.trim() === "" ? null : Number(text);
+    if (n !== null && (!Number.isInteger(n) || n < 0 || n > 999)) return;
+    if (n !== value && !(await onSave(n))) return;
+    setEditing(false);
+  };
+  if (!editing) {
+    return (
+      <button onClick={() => { setText(value?.toString() ?? ""); setEditing(true); }}
+        title="Click to set the shirt number" className="hover:text-brand hover:underline min-w-[1.5rem] text-left">
+        {value ?? "—"}
+      </button>
+    );
+  }
+  return (
+    <input autoFocus type="number" min={0} max={999} value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+      className="border border-border rounded px-1 py-0.5 text-xs w-14 focus:outline-none focus:ring-1 focus:ring-brand" />
+  );
+}
+
+// Flags a player whose PlayFootball registration is unpaid, incomplete or withdrawn.
+function RegistrationBadge({ player }: { player: { pfStatus?: string | null; pfPaymentStatus?: string | null } }) {
+  const st = registrationState(player.pfStatus, player.pfPaymentStatus);
+  if (!isProblem(st)) return null;
+  return (
+    <span title={[player.pfStatus, player.pfPaymentStatus].filter(Boolean).join(" · ")}
+      className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full border bg-red-50 border-red-200 text-red-700">
+      {REGISTRATION_LABEL[st]}
+    </span>
   );
 }

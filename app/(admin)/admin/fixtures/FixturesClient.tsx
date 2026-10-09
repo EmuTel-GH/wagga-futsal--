@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import FixtureRow from "./FixtureRow";
+import GenerateDrawForm, { describeDraw, type DrawCompetition, type DrawResult } from "@/components/admin/GenerateDrawForm";
 import { breakFor, type BreakRange } from "@/lib/breakDates";
 
 type TeamRef = { id: string; name: string };
@@ -28,7 +29,7 @@ type Fixture = {
 
 type Referee = { id: string; user: { name: string } };
 type Pitch = { id: string; name: string; venue: { name: string } };
-type Competition = { id: string; name: string; season: string };
+type Competition = DrawCompetition & { season: string };
 
 export default function FixturesClient({
   initialFixtures,
@@ -46,8 +47,6 @@ export default function FixturesClient({
   breaks: BreakRange[];
 }) {
   const [fixtures, setFixtures] = useState<Fixture[]>(initialFixtures);
-  const [drawDate, setDrawDate] = useState("");
-  const [drawBusy, setDrawBusy] = useState(false);
   const [drawMsg, setDrawMsg] = useState("");
 
   const handleUpdated = (f: Fixture) => setFixtures((prev) => prev.map((x) => (x.id === f.id ? { ...x, ...f } : x)));
@@ -117,30 +116,9 @@ export default function FixturesClient({
   const fmtWhen = (iso: string) =>
     new Date(iso).toLocaleString("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
-  const handleGenerateDraw = async () => {
-    if (!selectedCompId || !drawDate) return;
-    const comp = competitions.find((c) => c.id === selectedCompId);
-    if (!confirm(`Generate a draft draw for ${comp?.name}? Existing unplayed fixtures for this competition (draft or published) will be replaced. Weeks that fall in a break are skipped.`)) return;
-    setDrawBusy(true);
-    setDrawMsg("");
-    const res = await fetch("/api/admin/draw", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitionId: selectedCompId, startDate: drawDate }),
-    });
-    const data = await res.json();
-    setDrawBusy(false);
-    if (!res.ok) {
-      setDrawMsg(data.error ?? "Failed to generate draw");
-      return;
-    }
-    const skipped = (data.skippedWeeks ?? []) as { weekOf: string; breakName: string }[];
+  const handleGenerated = (data: DrawResult) => {
     try {
-      sessionStorage.setItem(
-        "fixturesNotice",
-        `Draft draw created: ${data.fixtures} fixtures over ${data.rounds} rounds. It isn't on the website until you publish it.` +
-          (skipped.length ? ` Skipped ${skipped.length} week${skipped.length === 1 ? "" : "s"} for breaks: ${skipped.map((s) => `${s.weekOf} (${s.breakName})`).join(", ")}.` : "")
-      );
+      sessionStorage.setItem("fixturesNotice", describeDraw(data));
     } catch {}
     window.location.reload();
   };
@@ -169,30 +147,17 @@ export default function FixturesClient({
           ))}
         </select>
 
-        {selectedCompId && (
-          <div className="flex items-center gap-2 ml-auto">
-            <input
-              type="date"
-              value={drawDate}
-              onChange={(e) => setDrawDate(e.target.value)}
-              className="border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-            />
-            <button
-              onClick={handleGenerateDraw}
-              disabled={drawBusy || !drawDate}
-              className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-dark disabled:opacity-60"
-            >
-              {drawBusy ? "Generating…" : "Generate Draw"}
-            </button>
-          </div>
-        )}
-        <Link
-          href="/admin/fixtures/breaks"
-          className={`text-sm text-brand font-semibold hover:underline ${selectedCompId ? "" : "ml-auto"}`}
-        >
+        <Link href="/admin/fixtures/breaks" className="text-sm text-brand font-semibold hover:underline ml-auto">
           Breaks &amp; holidays ({breaks.length}) →
         </Link>
       </div>
+
+      {selectedComp && (
+        <div className="bg-white border border-border rounded-xl p-4 mb-4">
+          <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Generate draw</p>
+          <GenerateDrawForm competition={selectedComp} onGenerated={handleGenerated} />
+        </div>
+      )}
 
       {drawMsg && (
         <p className="text-sm text-red-600 mb-4">{drawMsg}</p>
@@ -276,7 +241,7 @@ export default function FixturesClient({
       {rounds.length === 0 ? (
         <p className="text-muted text-sm">
           {selectedCompId
-            ? "No fixtures yet — pick the season start date above and hit Generate Draw (teams play each other twice; Opens three times)."
+            ? "No fixtures yet. Choose the draw settings above and generate a draft draw."
             : "No fixtures found. Select a competition to generate its draw."}
         </p>
       ) : (

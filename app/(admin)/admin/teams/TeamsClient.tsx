@@ -5,7 +5,7 @@ import AddTeamForm from "./AddTeamForm";
 import TeamRow, { teamNeedsReview, type Dispensation, type Player, type Team } from "./TeamRow";
 
 type Competition = { id: string; name: string; season: string };
-type Official = { id: string; firstName: string; lastName: string; role: string; teamId: string | null };
+type Official = { id: string; firstName: string; lastName: string; role: string; teams?: { id: string; name: string }[] };
 
 export default function TeamsClient({
   initialTeams,
