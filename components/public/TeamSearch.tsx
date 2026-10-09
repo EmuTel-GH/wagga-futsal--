@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getMyTeams, saveMyTeams } from "@/components/public/MyTeamsWidget";
+import { getMyTeams, saveMyTeams, MAX_MY_TEAMS } from "@/components/public/MyTeamsWidget";
 
 interface Result {
   id: string;
@@ -10,9 +10,10 @@ interface Result {
 }
 
 // Find-your-team search (dark style for the homepage hero). Selecting a team
-// pins it to "My Teams" (up to 5 — kids in multiple teams, multi-team players)
+// pins it to "My Teams" (up to 10 — kids in multiple teams, multi-team players)
 // and opens the team page.
-export default function TeamSearch({ placeholder = "Find your team…" }: { placeholder?: string }) {
+// stayOnPage: just save the team (My Teams page) instead of opening it.
+export default function TeamSearch({ placeholder = "Find your team…", stayOnPage = false }: { placeholder?: string; stayOnPage?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [open, setOpen] = useState(false);
@@ -47,12 +48,12 @@ export default function TeamSearch({ placeholder = "Find your team…" }: { plac
 
   const select = (team: Result) => {
     const current = getMyTeams();
-    if (!current.some((t) => t.id === team.id) && current.length < 5) {
+    if (!current.some((t) => t.id === team.id) && current.length < MAX_MY_TEAMS) {
       saveMyTeams([...current, { id: team.id, name: team.name }]);
     }
     setOpen(false);
     setQuery("");
-    router.push(`/teams/${team.id}`);
+    if (!stayOnPage) router.push(`/teams/${team.id}`);
   };
 
   return (

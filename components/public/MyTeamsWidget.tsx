@@ -4,8 +4,9 @@ import Link from "next/link";
 
 // Pinned teams live in this browser only (localStorage) — most visitors follow
 // one or two teams (their own, their kids'). Pins are set from the homepage
-// team search; up to 5.
+// team search or the ⭐ Save button on a team page; up to MAX_MY_TEAMS.
 type SavedTeam = { id: string; name: string };
+export const MAX_MY_TEAMS = 10;
 
 export function getMyTeams(): SavedTeam[] {
   try {
@@ -47,6 +48,10 @@ export default function MyTeamsWidget() {
     <section className="bg-brand/5 border-b border-brand/20 px-4 py-3">
       <div className="max-w-5xl mx-auto flex items-center gap-3 flex-wrap">
         <span className="text-xs font-black text-brand uppercase tracking-widest shrink-0">⭐ My Teams</span>
+        <Link href={`/my-teams?teams=${teams.map((t) => t.id).join(",")}`}
+          className="text-xs font-bold text-white bg-brand hover:bg-brand-dark rounded-full px-3 py-1.5 whitespace-nowrap">
+          📅 All my fixtures
+        </Link>
         {teams.map((t) => (
           <span
             key={t.id}
