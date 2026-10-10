@@ -160,23 +160,22 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:3995/api/health >/dev/null && break; sleep 2; done
           B=http://127.0.0.1:3995; J="Content-Type: application/json"
           fails=0
-          check() { # check <expected> <label> <curl args...>
-            local want=$1 label=$2; shift 2
-            local got; got=$(curl -s -o /dev/null -w "%{http_code}" "$@")
-            if [ "$got" = "$want" ]; then echo "ok   $label → $got"; else echo "FAIL $label → $got (wanted $want)"; fails=$((fails+1)); fi
-          }
-          st() { echo -X PATCH -H "$J" -H "Cookie: session=$1" -d "{\"status\":\"$2\"}" $B/api/fixtures/f1/status; }
-          ev() { echo -X POST -H "$J" -H "Cookie: session=$1" -d "{\"teamId\":\"$2\",\"type\":\"GOAL\",\"minute\":5,\"half\":1}" $B/api/fixtures/f1/events; }
-          check 403 "other referee can't start the game"      $(st ref2token LIVE)
-          check 403 "other referee can't add a goal"          $(ev ref2token tH)
-          check 404 "other referee can't open the scorer page" -H "Cookie: session=ref2token" $B/referee/games/f1/score
-          check 200 "assigned referee opens the scorer page"   -H "Cookie: session=reftoken" $B/referee/games/f1/score
-          check 200 "assigned referee starts the game"         $(st reftoken LIVE)
-          check 400 "goal for a team that isn't playing"       $(ev reftoken tX)
-          check 201 "assigned referee adds a goal"             $(ev reftoken tH)
-          check 200 "assigned referee completes the game"      $(st reftoken COMPLETED)
-          check 403 "referee can't reopen a finished game"     $(st reftoken LIVE)
-          check 403 "referee can't add to a finished game"     $(ev reftoken tA)
-          check 200 "admin can still correct a finished game"  $(st admintoken LIVE)
+          # code <curl args...> → HTTP status only (args passed as an array: no word splitting)
+          code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+          st() { code -X PATCH -H "$J" -H "Cookie: session=$1" -d "{\"status\":\"$2\"}" "$B/api/fixtures/f1/status"; }
+          ev() { code -X POST -H "$J" -H "Cookie: session=$1" -d "{\"teamId\":\"$2\",\"type\":\"GOAL\",\"minute\":5,\"half\":1}" "$B/api/fixtures/f1/events"; }
+          page() { code -H "Cookie: session=$1" "$B/referee/games/f1/score"; }
+          is() { if [ "$2" = "$1" ]; then echo "ok   $3 → $2"; else echo "FAIL $3 → $2 (wanted $1)"; fails=$((fails+1)); fi; }
+          is 403 "$(st ref2token LIVE)"       "other referee can't start the game"
+          is 403 "$(ev ref2token tH)"         "other referee can't add a goal"
+          is 404 "$(page ref2token)"          "other referee can't open the scorer page"
+          is 200 "$(page reftoken)"           "assigned referee opens the scorer page"
+          is 200 "$(st reftoken LIVE)"        "assigned referee starts the game"
+          is 400 "$(ev reftoken tX)"          "goal for a team that isn't playing"
+          is 201 "$(ev reftoken tH)"          "assigned referee adds a goal"
+          is 200 "$(st reftoken COMPLETED)"   "assigned referee completes the game"
+          is 403 "$(st reftoken LIVE)"        "referee can't reopen a finished game"
+          is 403 "$(ev reftoken tA)"          "referee can't add to a finished game"
+          is 200 "$(st admintoken LIVE)"      "admin can still correct a finished game"
           docker rm -f prd3 >/dev/null
           [ "$fails" = 0 ] || exit 1
