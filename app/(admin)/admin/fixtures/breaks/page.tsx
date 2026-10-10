@@ -1,3 +1,4 @@
+import { adminPage } from "@/lib/auth";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { dateKey } from "@/lib/breaks";
@@ -6,6 +7,7 @@ import BreaksClient from "./BreaksClient";
 export const dynamic = "force-dynamic";
 
 export default async function BreaksPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const [breaks, competitions] = await Promise.all([
     prisma.fixtureBreak.findMany({
       include: { competition: { select: { id: true, name: true } } },

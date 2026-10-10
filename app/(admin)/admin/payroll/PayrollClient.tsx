@@ -92,10 +92,9 @@ export default function PayrollClient({ initialRate }: { initialRate: RateRow | 
         scorerSeniorCents: Math.round(parseFloat(scorerSrDollars) * 100),
       }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      setRate((r) => ({ ...r, ...data }));
-    }
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) setRate((r) => ({ ...r, ...data }));
+    else alert(data.error ?? "Couldn't save the rates");
     setSavingRate(false);
   };
 

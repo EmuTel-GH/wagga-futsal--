@@ -3,7 +3,41 @@
 One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
+## 2026-10-11
+- **Tidy-ups**: the bank payment (ABA) file's header is laid out to the
+  banking standard and names are cleaned to characters banks accept; calendar
+  feeds handle punctuation properly; standard browser security protections
+  are on; online session booking stays switched off until Stripe is set up;
+  administrators change their own password from My account; bank details
+  are tied to the referee they belong to.
+- **Scoring is limited to each game's officials**: only the referee or scorer
+  assigned to a game (or an administrator) can record its score and events,
+  and finished games can only be changed by an administrator.
+- **Less personal information on match pages**: live match pages and the
+  scoring console now load only what they show (team names, scores, events,
+  players' names and shirt numbers), not team contact details or players'
+  dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
+- **Safer account set-up**: new accounts and password resets now use a
+  one-time set-up link that an administrator creates on the Users page and
+  sends to the person (valid 7 days, works once). Referees still waiting to
+  set a password need a link from an administrator.
+- **Payroll permission**: pay rates, the ABA pay file and referees' bank
+  details now need a new "Manage payroll" permission. Administrators who
+  manage users get it in the next update (or tick it on the Users page).
+  Pay rates must be whole-cent amounts between $0 and $1,000. Every bank
+  detail change is recorded in the audit log.
+- **Tighter admin checks**: every admin page checks sign-in itself; referee
+  logins can only be created or removed by administrators who manage users,
+  and referees with games are kept (deactivated) rather than deleted;
+  sign-in sessions use stronger random keys; fixture screens no longer load
+  referees' private details.
+- **Team nominations**: the online form checks every field properly, and a
+  nominated team only appears on the website once it's approved.
+
 ## 2026-10-10
+- Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
 - **Staging site locked to administrators** (PR #11): the test site needs an
   administrator sign-in for every page, and search engines are told not to
   index it. The real site is unchanged.

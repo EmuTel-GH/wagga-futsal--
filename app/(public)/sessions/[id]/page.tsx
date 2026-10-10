@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import BookingForm from "./BookingForm";
+import { bookingsEnabled } from "@/lib/bookings";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,11 @@ export default async function SessionBookingPage({ params }: { params: Promise<{
         <span className="font-semibold text-brand">${(session.priceCents / 100).toFixed(2)}</span>
       </p>
 
-      {spotsLeft <= 0 || session.status === "FULL" ? (
+      {!bookingsEnabled() ? (
+        <div className="bg-gray-50 border border-border rounded-xl p-6 text-center">
+          <p className="font-bold text-navy">Online booking isn&apos;t open yet.</p>
+        </div>
+      ) : spotsLeft <= 0 || session.status === "FULL" ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="font-bold text-red-700">This session is full.</p>
         </div>

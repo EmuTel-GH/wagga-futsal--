@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { validateRates } from "@/lib/payRates";
 import { audit } from "@/lib/audit";
-import { generateABA } from "@/lib/aba";
+import { generateABA, ABAError } from "@/lib/aba";
 import { maskBank, openBank } from "@/lib/bankDetails";
 
 // Two referee rate tiers: senior games (U16 & Opens — incl. U19/Social) and
@@ -11,7 +12,7 @@ const SENIOR_GROUPS = ["U16", "U19", "OPENS", "SOCIAL"];
 const isSenior = (ageGroup: string) => SENIOR_GROUPS.includes(ageGroup);
 
 export async function GET(req: Request) {
-  try { await requireAdmin(); } catch {
+  try { await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   let session;
-  try { session = await requireAdmin(); } catch {
+  try { session = await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -127,6 +128,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No payable referees with bank details in this period" }, { status: 400 });
   }
 
+  // Build the file first: input the bank would reject is a 400, and isn't saved.
+  let aba: string;
+  try {
+    aba = generateABA(payees, {
+      bankMnemonic: orgBank,
+      userName: orgName,
+      userBsb: orgBsb,
+      userAccount: orgAccount,
+      apcaId: orgApcaId,
+      description: "GAME FEES",
+      processingDate: new Date(),
+    });
+  } catch (e) {
+    if (e instanceof ABAError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
+
   // Save org details to rate card for next time
   await prisma.payRate.upsert({
     where: { id: rate?.id ?? "default" },
@@ -137,16 +155,6 @@ export async function POST(req: Request) {
       orgBsb, orgAccount, orgName, orgBank, orgApcaId,
     },
     update: { orgBsb, orgAccount, orgName, orgBank, orgApcaId },
-  });
-
-  const aba = generateABA(payees, {
-    bankMnemonic: orgBank,
-    userName: orgName,
-    userBsb: orgBsb,
-    userAccount: orgAccount,
-    apcaId: orgApcaId,
-    description: "GAME FEES",
-    processingDate: new Date(),
   });
 
   const filename = `referee-pay-${from}-to-${to}.aba`;
@@ -167,16 +175,18 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   let session;
-  try { session = await requireAdmin(); } catch {
+  try { session = await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents } = await req.json();
+  const checked = validateRates(await req.json().catch(() => null));
+  if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: 400 });
+  const { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents } = checked.rates;
 
   const rate = await prisma.payRate.upsert({
     where: { id: "default" },
-    create: { id: "default", fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
-    update: { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
+    create: { id: "default", ...checked.rates },
+    update: checked.rates,
   });
 
   await audit(session, {

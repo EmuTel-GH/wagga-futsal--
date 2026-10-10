@@ -56,6 +56,12 @@ is green and you've tested it, merge (and promote) without waiting.
   rollback runs the old code on the new schema): add columns as nullable or with
   a default, add tables freely, and only drop or rename in a later release once
   no deployed code uses the old shape.
+  - **New enum values: add them in one release, store them in a later one.**
+    An older Prisma client throws on any enum value it doesn't know, so a row
+    holding a new value breaks the previous release. Add the value (in its own
+    file: `ALTER TYPE … ADD VALUE` can't be used in the same transaction); only
+    after that release is live in production may a migration or the app write
+    it. CI's payroll step shows the failure.
 - Fresh empty database (new environment): `prisma db push`, then
   `node scripts/migrate.mjs --baseline-all`.
 
@@ -78,6 +84,10 @@ is green and you've tested it, merge (and promote) without waiting.
   ADMIN's real session gets past, apart from sign-in, `/api/auth/*`,
   `/api/health` and static files; every response gets `X-Robots-Tag: noindex`.
   In production it does nothing. Logic + tests: `lib/stagingGate.ts`.
+  **This is the only lock on staging** (it holds a copy of real data, and
+  there's no password prompt in front of it any more). Keep it working in
+  every version. Never remove, bypass or loosen it, or widen its open paths
+  without a very good reason. CI's "Staging gate" step fails if it stops working.
 - Referees' bank details are encrypted in the app (`lib/bankDetails.ts`) and
   only ever sent to the browser masked. Keep it that way.
 - Next.js here differs from older versions: read `node_modules/next/dist/docs/`.
@@ -90,6 +100,8 @@ is green and you've tested it, merge (and promote) without waiting.
 - Weaken an auth or permission check to make something work.
 
 ## Useful places
+- `lib/setupLinks.ts`: one-time password set-up links (hashed, single use, 7 days).
+  Never reintroduce username-only first sign-in.
 - `lib/draw.ts` (round-robin + scheduling around breaks), `lib/drawRequests.ts`
   (fix a match/bye to a week), `lib/split.ts`, `lib/finals.ts`,
   `lib/eligibility.ts` (age rules), `lib/audit.ts` (audit log: call it from

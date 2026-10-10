@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { bookingsEnabled } from "@/lib/bookings";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!bookingsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { id: sessionId } = await params;
   const { name, email, phone, participants } = await req.json();
 

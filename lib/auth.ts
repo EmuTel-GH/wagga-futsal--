@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { randomBytes } from "node:crypto";
 import type { Permission } from "@prisma/client";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
@@ -15,8 +17,9 @@ export async function verifyPassword(password: string, hash: string) {
 
 export async function createSession(userId: string) {
   const expiresAt = new Date(Date.now() + SESSION_MAX_AGE * 1000);
+  // 256 random bits (cuid, the column default, isn't meant for secrets).
   const session = await prisma.authSession.create({
-    data: { userId, expiresAt },
+    data: { userId, expiresAt, token: randomBytes(32).toString("base64url") },
   });
   return session.token;
 }
@@ -85,4 +88,16 @@ export async function requirePermission(permission: Permission) {
     throw new Error("Forbidden");
   }
   return session;
+}
+
+/**
+ * For admin PAGES: check sign-in in the page itself, not just the layout
+ * (layouts don't re-run on every navigation). Redirects to sign-in.
+ */
+export async function adminPage(permission?: Permission) {
+  try {
+    return permission ? await requirePermission(permission) : await requireAdmin();
+  } catch {
+    redirect("/referee/login");
+  }
 }

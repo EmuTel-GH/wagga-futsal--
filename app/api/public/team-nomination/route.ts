@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { validateNomination } from "@/lib/nomination";
 
 // Public team nomination — the online replacement for the emailed team
 // registration form. Creates the team (with contact + kit details), links it
@@ -12,15 +13,9 @@ export async function POST(req: Request) {
   // Honeypot: real users never fill this hidden field.
   if (website) return NextResponse.json({ ok: true });
 
-  if (!teamName || !competitionId || !contactName || !contactEmail) {
-    return NextResponse.json(
-      { error: "Team name, competition, contact name and contact email are required" },
-      { status: 400 }
-    );
-  }
-  if (String(teamName).length > 60) {
-    return NextResponse.json({ error: "Team name too long" }, { status: 400 });
-  }
+  // Every field: right type, sensible length; a real-looking email.
+  const problem = validateNomination({ teamName, competitionId, contactName, contactEmail, contactPhone, kitShirt, kitShorts, kitSocks, players });
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
   const competition = await prisma.competition.findUnique({ where: { id: competitionId } });
   if (!competition || !["REGISTRATION", "ACTIVE"].includes(competition.status)) {

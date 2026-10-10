@@ -1,3 +1,4 @@
+import { adminPage } from "@/lib/auth";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { flaggedExpected } from "@/lib/squadReview";
@@ -5,6 +6,7 @@ import { flaggedExpected } from "@/lib/squadReview";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const [players, teams, competitions, liveFixtures, upcomingFixtures, pendingBookings, squadReview, draftsByComp] =
     await Promise.all([
       prisma.player.count(),

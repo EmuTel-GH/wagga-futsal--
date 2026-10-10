@@ -7,6 +7,10 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  // The seed creates demo logins with known passwords: never on a real site.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed: NODE_ENV is production (the seed creates demo accounts with known passwords)");
+  }
   console.log("🌱 Seeding Wagga Futsal...");
 
   // ─── Venue & Pitches ─────────────────────────────────────────────────────────

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { bookingsEnabled } from "@/lib/bookings";
 
 export async function POST(req: Request) {
+  if (!bookingsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const body = await req.text();
   const sig = req.headers.get("stripe-signature")!;
 
