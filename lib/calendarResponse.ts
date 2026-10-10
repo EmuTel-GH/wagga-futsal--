@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { teamSchedule } from "./teamSchedule";
 import { buildIcs } from "./ics";
+import { siteUrl } from "./siteUrl";
 
-export const siteUrl = (req: Request) => (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
 
 /** An .ics feed for the given teams. ?download=1 saves a file instead of subscribing. */
 export async function calendarResponse(req: Request, teamIds: string[]) {
