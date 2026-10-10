@@ -76,13 +76,15 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   if (body.password) {
+    // Your own password goes through My account (current password, other sessions signed out).
+    if (isSelf) return NextResponse.json({ error: "Use My account to change your own password." }, { status: 400 });
     if (String(body.password).length < MIN_ADMIN_SET_PASSWORD) {
       return NextResponse.json({ error: `Password must be at least ${MIN_ADMIN_SET_PASSWORD} characters` }, { status: 400 });
     }
     data.passwordHash = await hashPassword(String(body.password));
     data.mustSetPassword = false;
     changes.push("password reset by administrator");
-    revokeSessions = !isSelf;
+    revokeSessions = true;
   } else if (body.requirePasswordSetup === true) {
     if (isSelf) return NextResponse.json({ error: "Use My account to change your own password." }, { status: 400 });
     data.passwordHash = await hashPassword(crypto.randomUUID());

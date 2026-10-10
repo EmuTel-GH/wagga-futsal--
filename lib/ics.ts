@@ -7,7 +7,8 @@ import type { ScheduleItem } from "./teamSchedule";
  * an updated fixture replaces its event rather than duplicating it.
  */
 
-const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+// RFC 5545 TEXT escaping: backslash, semicolon, comma, and any line break.
+export const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
 const utc = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const day = (key: string) => key.replace(/-/g, "");
 

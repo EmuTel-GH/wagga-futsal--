@@ -35,19 +35,34 @@ test("PlayFootball statuses from the real export", () => {
   assert.equal(registrationState(null, null), "UNKNOWN");
 });
 
-test("bank details: encrypted, masked, tamper-evident, never plaintext without a key", async () => {
+test("bank details: encrypted, masked, tamper-evident, bound to the referee and field", async () => {
   process.env.BANK_DETAILS_KEY = randomBytes(32).toString("base64");
   const { sealBank, openBank, maskBank, open } = await import("../lib/bankDetails");
-  const s = sealBank({ bsb: "062 000", accountNumber: "12345678", accountName: "Jane Citizen" });
+  const s = sealBank({ bsb: "062 000", accountNumber: "12345678", accountName: "Jane Citizen" }, "ref1");
   assert.ok("data" in s);
-  const d = (s as { data: { bsb: string; accountNumber: string; accountName: string } }).data;
-  assert.ok(Object.values(d).every((v) => v.startsWith("enc:v1:")));
+  const d = { id: "ref1", ...(s as { data: { bsb: string; accountNumber: string; accountName: string } }).data };
+  assert.ok([d.bsb, d.accountNumber, d.accountName].every((v) => v.startsWith("enc:v2:")));
   assert.deepEqual(openBank(d), { bsb: "062-000", accountNumber: "12345678", accountName: "Jane Citizen" });
   assert.equal(maskBank(d).accountNumber, "••••5678");
-  assert.throws(() => open(d.accountNumber.slice(0, -2) + (d.accountNumber.endsWith("A") ? "BB" : "AA")));
-  assert.ok("error" in sealBank({ bsb: "062000", accountNumber: "1234567890", accountName: "J C" }), "ABA holds 9 digits");
+  // Tampering, another referee, another field, or a short tag all fail.
+  assert.throws(() => open(d.accountNumber.slice(0, -2) + (d.accountNumber.endsWith("A") ? "BB" : "AA"), "ref1", "accountNumber"));
+  assert.throws(() => open(d.accountNumber, "ref2", "accountNumber"), "copied to another referee");
+  assert.throws(() => open(d.accountNumber, "ref1", "bsb"), "copied to another field");
+  assert.equal(maskBank({ ...d, id: "ref2" }).accountNumber, "•••• (locked)");
+  const [iv, tag, ct] = d.accountNumber.slice(7).split(":");
+  const shortTag = Buffer.from(tag, "base64").subarray(0, 4).toString("base64");
+  assert.throws(() => open(`enc:v2:${iv}:${shortTag}:${ct}`, "ref1", "accountNumber"), "truncated tag");
+  // Details saved before v2 (no associated data) still read.
+  const { createCipheriv } = await import("node:crypto");
+  const v1iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", Buffer.from(process.env.BANK_DETAILS_KEY, "base64"), v1iv);
+  const v1ct = Buffer.concat([c.update("87654321", "utf8"), c.final()]);
+  const v1 = `enc:v1:${v1iv.toString("base64")}:${c.getAuthTag().toString("base64")}:${v1ct.toString("base64")}`;
+  assert.equal(open(v1, "any", "accountNumber"), "87654321");
+  assert.throws(() => open("12345678", "ref1", "accountNumber"), "plaintext refused");
+  assert.ok("error" in sealBank({ bsb: "062000", accountNumber: "1234567890", accountName: "J C" }, "ref1"), "ABA holds 9 digits");
   delete process.env.BANK_DETAILS_KEY;
-  assert.throws(() => sealBank({ bsb: "062000", accountNumber: "12345678", accountName: "J C" }));
+  assert.throws(() => sealBank({ bsb: "062000", accountNumber: "12345678", accountName: "J C" }, "ref1"));
 });
 
 test("calendar feed: valid folding, UTC times, byes all-day", () => {

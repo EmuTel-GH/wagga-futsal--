@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/auth";
 import { validateRates } from "@/lib/payRates";
 import { audit } from "@/lib/audit";
-import { generateABA } from "@/lib/aba";
+import { generateABA, ABAError } from "@/lib/aba";
 import { maskBank, openBank } from "@/lib/bankDetails";
 
 // Two referee rate tiers: senior games (U16 & Opens — incl. U19/Social) and
@@ -128,6 +128,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No payable referees with bank details in this period" }, { status: 400 });
   }
 
+  // Build the file first: input the bank would reject is a 400, and isn't saved.
+  let aba: string;
+  try {
+    aba = generateABA(payees, {
+      bankMnemonic: orgBank,
+      userName: orgName,
+      userBsb: orgBsb,
+      userAccount: orgAccount,
+      apcaId: orgApcaId,
+      description: "GAME FEES",
+      processingDate: new Date(),
+    });
+  } catch (e) {
+    if (e instanceof ABAError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
+
   // Save org details to rate card for next time
   await prisma.payRate.upsert({
     where: { id: rate?.id ?? "default" },
@@ -138,16 +155,6 @@ export async function POST(req: Request) {
       orgBsb, orgAccount, orgName, orgBank, orgApcaId,
     },
     update: { orgBsb, orgAccount, orgName, orgBank, orgApcaId },
-  });
-
-  const aba = generateABA(payees, {
-    bankMnemonic: orgBank,
-    userName: orgName,
-    userBsb: orgBsb,
-    userAccount: orgAccount,
-    apcaId: orgApcaId,
-    description: "GAME FEES",
-    processingDate: new Date(),
   });
 
   const filename = `referee-pay-${from}-to-${to}.aba`;
