@@ -3,6 +3,12 @@
 One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
+## 2026-10-11
+- **Less personal information on match pages**: live match pages and the
+  scoring console now load only what they show (team names, scores, events,
+  players' names and shirt numbers), not team contact details or players'
+  dates of birth.
+
 ## 2026-10-10
 - Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
 - **Staging site locked to administrators** (PR #11): the test site needs an
