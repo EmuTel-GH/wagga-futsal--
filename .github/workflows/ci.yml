@@ -189,6 +189,35 @@ jobs:
           is 403 "$(ev reftoken tA)"          "referee can't add to a finished game"
           is 200 "$(st admintoken LIVE)"      "admin can still correct a finished game"
           docker rm -f prd3 >/dev/null
+      # Public match pages and the scorer page must not expose team contacts,
+      # fixture notes, referee ids or players' dates of birth / registration ids.
+      - name: No personal data on match pages
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+          INSERT INTO "Competition"(id, name, season, "ageGroup") VALUES ('c9', 'Leak Comp', '2026', 'U12') ON CONFLICT DO NOTHING;
+          INSERT INTO "Team"(id, name, "contactName", "contactEmail", "contactPhone") VALUES
+            ('tL1', 'Leak Home', 'Parent Name', 'parent-secret@example.test', '0400 000 999'),
+            ('tL2', 'Leak Away', 'Other Parent', 'other-secret@example.test', '0400 000 888');
+          INSERT INTO "Player"(id, "firstName", "lastName", "dateOfBirth", gender, "playFootballId") VALUES ('pL', 'Kid', 'Player', '2015-03-07', 'MALE', 'PF-SECRET-123');
+          INSERT INTO "TeamPlayer"(id, "teamId", "playerId", "jerseyNumber") VALUES ('tpL', 'tL1', 'pL', 7);
+          INSERT INTO "Fixture"(id, "competitionId", "homeTeamId", "awayTeamId", "scheduledAt", round, status, notes, "updatedAt")
+            VALUES ('fL', 'c9', 'tL1', 'tL2', now(), 1, 'LIVE', 'internal-note-SECRET', now());
+          INSERT INTO "MatchEvent"(id, "fixtureId", "teamId", type, minute, "playerName") VALUES ('eL', 'fL', 'tL1', 'GOAL', 3, 'Kid Player');
+          SQL
+          docker run -d --name prd4 --network host -e PORT=3994 -e APP_URL=http://localhost:3994 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3994/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3994
+          leaks='parent-secret|other-secret|0400 000|Parent Name|internal-note-SECRET|PF-SECRET|2015-03-07|dateOfBirth|playFootballId|contactEmail|fieldRefereeId|scorerId'
+          fails=0
+          for what in "/api/fixtures/fL" "/live/fL" "/referee/games/fL/score"; do
+            body=$(curl -s -H "Cookie: session=admintoken" "$B$what")
+            echo "$body" | grep -q "Leak Home" || { echo "FAIL $what didn't render the fixture"; fails=$((fails+1)); continue; }
+            found=$(echo "$body" | grep -oE "$leaks" | sort -u | tr '\n' ' ')
+            if [ -n "$found" ]; then echo "FAIL $what exposes: $found"; fails=$((fails+1)); else echo "ok   $what shows the match without personal data"; fi
+          done
+          curl -s "$B/api/fixtures/fL" | grep -q '"name":"Leak Home"' && echo "ok   API still has what the live page needs" || { echo "FAIL API lost team names"; fails=$((fails+1)); }
+          docker rm -f prd4 >/dev/null
           [ "$fails" = 0 ] || exit 1
       # One-time password set-up links (replacing username-only first sign-in).
       - name: Account set-up links
