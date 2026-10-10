@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, hasPermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { maskBank, sealBank } from "@/lib/bankDetails";
 
@@ -49,6 +49,9 @@ export async function PATCH(req: Request, { params }: Params) {
   return NextResponse.json({ ...referee, ...maskBank(referee) });
 }
 
+// Remove a referee. A referee with games (pay and match history) is kept and
+// their login deactivated instead; logins need MANAGE_USERS; admin accounts
+// are managed on the Users page, never deleted from here.
 export async function DELETE(_req: Request, { params }: Params) {
   let session;
   try {
@@ -58,26 +61,43 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   const { id } = await params;
+  const referee = await prisma.referee.findUnique({
+    where: { id },
+    include: { user: { select: { id: true, role: true, name: true } }, _count: { select: { fieldRefGames: true, scorerGames: true } } },
+  });
+  if (!referee) return NextResponse.json({ error: "Referee not found" }, { status: 404 });
 
-  const referee = await prisma.referee.findUnique({ where: { id } });
-  if (!referee) {
-    return NextResponse.json({ error: "Referee not found" }, { status: 404 });
-  }
+  const refName = referee.user?.name ?? ([referee.firstName, referee.lastName].filter(Boolean).join(" ") || id);
+  const hasHistory = referee._count.fieldRefGames + referee._count.scorerGames > 0;
 
-  const refName = [referee.firstName, referee.lastName].filter(Boolean).join(" ");
-  if (referee.userId) {
-    // Deleting the login cascades to the referee record.
-    await prisma.user.delete({ where: { id: referee.userId } });
+  if (referee.user) {
+    if (!hasPermission(session.user, "MANAGE_USERS")) {
+      return NextResponse.json({ error: "Removing a referee's login needs the Manage users permission." }, { status: 403 });
+    }
+    if (referee.user.role === "ADMIN") {
+      return NextResponse.json({ error: "That's an administrator's account: manage it on the Users page." }, { status: 409 });
+    }
+    if (hasHistory) {
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: referee.user.id }, data: { active: false } }),
+        prisma.authSession.deleteMany({ where: { userId: referee.user.id } }),
+      ]);
+      await audit(session, { action: "referee.deactivate", summary: `Deactivated referee ${refName} (kept: has game history)`, entityType: "Referee", entityId: id, details: { userId: referee.user.id } });
+      return NextResponse.json({ ok: true, deactivated: true });
+    }
+    await prisma.user.delete({ where: { id: referee.user.id } }); // cascades to the referee profile
   } else {
+    if (hasHistory) {
+      return NextResponse.json({ error: "This referee has game history, so they're kept." }, { status: 409 });
+    }
     await prisma.referee.delete({ where: { id } });
   }
   await audit(session, {
     action: "referee.delete",
-    summary: `Deleted referee ${refName || id}${referee.userId ? " and their login" : ""}`,
+    summary: `Deleted referee ${refName}${referee.user ? " and their login" : ""}`,
     entityType: "Referee",
     entityId: id,
     details: { userId: referee.userId, playFootballId: referee.playFootballId },
   });
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deactivated: false });
 }

@@ -7,8 +7,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
  * its own reveals nothing. Pages only ever get a masked version; full numbers
  * are decrypted on the server just to build the ABA payment file.
  *
- * Stored format: "enc:v1:<iv>:<tag>:<ciphertext>" (base64 parts). Values
- * without the prefix are legacy plaintext and still read correctly.
+ * Stored format: "enc:v1:<iv>:<tag>:<ciphertext>" (base64 parts).
  */
 const PREFIX = "enc:v1:";
 
@@ -28,7 +27,8 @@ export function seal(plain: string) {
 
 export function open(stored: string | null): string | null {
   if (!stored) return null;
-  if (!stored.startsWith(PREFIX)) return stored; // legacy plaintext
+  // Everything is encrypted (checked in production 2026-10-11); refuse anything else.
+  if (!stored.startsWith(PREFIX)) throw new Error("Bank details are not in the encrypted format");
   const [iv, tag, ct] = stored.slice(PREFIX.length).split(":").map((p) => Buffer.from(p, "base64"));
   const d = createDecipheriv("aes-256-gcm", key(), iv);
   d.setAuthTag(tag);

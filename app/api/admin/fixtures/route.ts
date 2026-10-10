@@ -18,8 +18,8 @@ export async function GET(req: Request) {
       homeTeam: { select: { id: true, name: true } },
       awayTeam: { select: { id: true, name: true } },
       pitch: { select: { id: true, name: true } },
-      fieldReferee: { include: { user: { select: { id: true, name: true } } } },
-      scorer: { include: { user: { select: { id: true, name: true } } } },
+      fieldReferee: { select: { id: true, firstName: true, lastName: true, user: { select: { id: true, name: true } } } }, // names only: no bank details or phone
+      scorer: { select: { id: true, firstName: true, lastName: true, user: { select: { id: true, name: true } } } },
       competition: { select: { id: true, name: true, season: true } },
     },
     orderBy: [{ round: "asc" }, { scheduledAt: "asc" }],

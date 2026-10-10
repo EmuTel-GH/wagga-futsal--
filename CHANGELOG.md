@@ -3,6 +3,15 @@
 One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
+## 2026-10-11
+- **Tighter admin checks**: every admin page checks sign-in itself; referee
+  logins can only be created or removed by administrators who manage users,
+  and referees with games are kept (deactivated) rather than deleted;
+  sign-in sessions use stronger random keys; fixture screens no longer load
+  referees' private details.
+- **Team nominations**: the online form checks every field properly, and a
+  nominated team only appears on the website once it's approved.
+
 ## 2026-10-10
 - Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
 - **Staging site locked to administrators** (PR #11): the test site needs an

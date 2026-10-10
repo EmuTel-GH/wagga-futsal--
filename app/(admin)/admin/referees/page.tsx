@@ -1,3 +1,4 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { maskBank } from "@/lib/bankDetails";
 import RefereesClient from "./RefereesClient";
@@ -5,6 +6,7 @@ import RefereesClient from "./RefereesClient";
 export const dynamic = "force-dynamic";
 
 export default async function RefereesPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const referees = await prisma.referee.findMany({
     include: {
       user: { select: { id: true, name: true, email: true, role: true } },
