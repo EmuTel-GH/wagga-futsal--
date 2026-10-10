@@ -11,6 +11,8 @@ passed on to the club. Versions are the short git commit shown in the site foote
   scoring console now load only what they show (team names, scores, events,
   players' names and shirt numbers), not team contact details or players'
   dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
 - **Safer account set-up**: new accounts and password resets now use a
   one-time set-up link that an administrator creates on the Users page and
   sends to the person (valid 7 days, works once). Referees still waiting to
