@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: Params) {
   } else {
     let sealed;
     try {
-      sealed = sealBank(body);
+      sealed = sealBank(body, id);
     } catch {
       return NextResponse.json({ error: "Bank details can't be saved right now (encryption isn't configured). Contact support." }, { status: 500 });
     }

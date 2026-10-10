@@ -4,6 +4,12 @@ One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
 ## 2026-10-11
+- **Tidy-ups**: the bank payment (ABA) file's header is laid out to the
+  banking standard and names are cleaned to characters banks accept; calendar
+  feeds handle punctuation properly; standard browser security protections
+  are on; online session booking stays switched off until Stripe is set up;
+  administrators change their own password from My account; bank details
+  are tied to the referee they belong to.
 - **Scoring is limited to each game's officials**: only the referee or scorer
   assigned to a game (or an administrator) can record its score and events,
   and finished games can only be changed by an administrator.
