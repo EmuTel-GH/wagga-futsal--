@@ -1,9 +1,11 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import CompetitionsClient from "./CompetitionsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompetitionsPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const [competitions, venues] = await Promise.all([
     prisma.competition.findMany({
       include: {

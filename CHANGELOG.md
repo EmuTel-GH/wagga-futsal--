@@ -7,6 +7,28 @@ passed on to the club. Versions are the short git commit shown in the site foote
 - **Scoring is limited to each game's officials**: only the referee or scorer
   assigned to a game (or an administrator) can record its score and events,
   and finished games can only be changed by an administrator.
+- **Less personal information on match pages**: live match pages and the
+  scoring console now load only what they show (team names, scores, events,
+  players' names and shirt numbers), not team contact details or players'
+  dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
+- **Safer account set-up**: new accounts and password resets now use a
+  one-time set-up link that an administrator creates on the Users page and
+  sends to the person (valid 7 days, works once). Referees still waiting to
+  set a password need a link from an administrator.
+- **Payroll permission**: pay rates, the ABA pay file and referees' bank
+  details now need a new "Manage payroll" permission. Administrators who
+  already manage users have it; give it to others from the Users page.
+  Pay rates must be whole-cent amounts between $0 and $1,000. Every bank
+  detail change is recorded in the audit log.
+- **Tighter admin checks**: every admin page checks sign-in itself; referee
+  logins can only be created or removed by administrators who manage users,
+  and referees with games are kept (deactivated) rather than deleted;
+  sign-in sessions use stronger random keys; fixture screens no longer load
+  referees' private details.
+- **Team nominations**: the online form checks every field properly, and a
+  nominated team only appears on the website once it's approved.
 
 ## 2026-10-10
 - Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).

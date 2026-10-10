@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { cleanPermissions, MIN_ADMIN_SET_PASSWORD } from "@/lib/users";
+import { createSetupLink } from "@/lib/setupLinks";
+import { setupUrl } from "@/lib/setupTokens";
+import { siteUrl } from "@/lib/siteUrl";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -84,7 +87,7 @@ export async function PATCH(req: Request, { params }: Params) {
     if (isSelf) return NextResponse.json({ error: "Use My account to change your own password." }, { status: 400 });
     data.passwordHash = await hashPassword(crypto.randomUUID());
     data.mustSetPassword = true;
-    changes.push("password cleared — they create a new one at next sign-in");
+    changes.push("password cleared — set-up link created");
     revokeSessions = true;
   }
 
@@ -110,6 +113,11 @@ export async function PATCH(req: Request, { params }: Params) {
     details: { changes, revokedSessions: revokeSessions },
   });
 
+  // A cleared password comes with a one-time set-up link to send to them.
+  if (body.requirePasswordSetup === true) {
+    const { token, expiresAt } = await createSetupLink(id, session.user.id);
+    return NextResponse.json({ ...updated, setupUrl: setupUrl(siteUrl(req), token), setupExpiresAt: expiresAt });
+  }
   return NextResponse.json(updated);
 }
 

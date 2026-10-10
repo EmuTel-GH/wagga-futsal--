@@ -1,9 +1,13 @@
+import { redirect } from "next/navigation";
+import { adminPage, hasPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PayrollClient from "./PayrollClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function PayrollPage() {
+  const session = await adminPage(); // own check: layouts don't re-run on every navigation
+  if (!hasPermission(session.user, "MANAGE_PAYROLL")) redirect("/admin");
   const rate = await prisma.payRate.findFirst();
 
   return (

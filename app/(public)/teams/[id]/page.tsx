@@ -17,15 +17,16 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const team = await prisma.team.findUnique({ where: { id } });
+  const team = await prisma.team.findFirst({ where: { id, status: "APPROVED" } });
   return { title: team?.name ?? "Team" };
 }
 
 export default async function TeamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const team = await prisma.team.findUnique({
-    where: { id },
+  const team = await prisma.team.findFirst({
+    // Pending nominations aren't public until an admin approves them.
+    where: { id, status: "APPROVED" },
     include: {
       players: {
         include: { player: true },

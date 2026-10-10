@@ -92,7 +92,7 @@ function BankEditor({ referee, onSaved }: { referee: Referee; onSaved: (r: Refer
   );
 }
 
-export default function RefereesClient({ initialReferees }: { initialReferees: Referee[] }) {
+export default function RefereesClient({ initialReferees, canEditBank }: { initialReferees: Referee[]; canEditBank: boolean }) {
   const [referees, setReferees] = useState<Referee[]>(initialReferees);
 
   const handleCreated = (r: Referee) => setReferees((prev) => [...prev, r]);
@@ -102,8 +102,11 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Remove referee "${name}"? This will delete their login account.`)) return;
-    await fetch(`/api/admin/referees/${id}`, { method: "DELETE" });
+    if (!confirm(`Remove referee "${name}"? Referees with games are kept and their login deactivated instead.`)) return;
+    const res = await fetch(`/api/admin/referees/${id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error ?? "Couldn't remove the referee");
+    if (data.deactivated) return alert(`${name} has game history, so they've been kept and their login deactivated.`);
     setReferees((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -144,10 +147,12 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted">{r.bsb} · {r.accountNumber}</span>
                         {r.accountName && <span className="text-xs text-muted">{r.accountName}</span>}
-                        <BankEditor referee={r} onSaved={handleBankSaved} />
+                        {canEditBank && <BankEditor referee={r} onSaved={handleBankSaved} />}
                       </div>
-                    ) : (
+                    ) : canEditBank ? (
                       <BankEditor referee={r} onSaved={handleBankSaved} />
+                    ) : (
+                      <span className="text-xs text-muted">Not set</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">

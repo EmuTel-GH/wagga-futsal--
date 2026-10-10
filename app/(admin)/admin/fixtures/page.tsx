@@ -1,3 +1,4 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { dateKey } from "@/lib/breaks";
 import FixturesClient from "./FixturesClient";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 type Props = { searchParams: Promise<{ comp?: string }> };
 
 export default async function FixturesPage({ searchParams }: Props) {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const { comp } = await searchParams;
 
   const [fixtures, referees, pitches, competitions, breaks, compTeams] = await Promise.all([
@@ -16,14 +18,14 @@ export default async function FixturesPage({ searchParams }: Props) {
         homeTeam: { select: { id: true, name: true } },
         awayTeam: { select: { id: true, name: true } },
         pitch: { select: { id: true, name: true } },
-        fieldReferee: { include: { user: { select: { id: true, name: true } } } },
-        scorer: { include: { user: { select: { id: true, name: true } } } },
+        fieldReferee: { select: { id: true, firstName: true, lastName: true, user: { select: { id: true, name: true } } } }, // names only: no bank details or phone
+        scorer: { select: { id: true, firstName: true, lastName: true, user: { select: { id: true, name: true } } } },
         competition: { select: { id: true, name: true, season: true } },
       },
       orderBy: [{ round: "asc" }, { scheduledAt: "asc" }],
     }),
     prisma.referee.findMany({
-      include: { user: { select: { id: true, name: true } } },
+      select: { id: true, firstName: true, lastName: true, user: { select: { id: true, name: true } } },
       orderBy: { user: { name: "asc" } },
     }),
     prisma.pitch.findMany({

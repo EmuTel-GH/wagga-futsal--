@@ -25,6 +25,25 @@ const input = "border border-border rounded px-2 py-1.5 text-xs w-full focus:out
 const btn = "bg-brand text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-brand-dark disabled:opacity-60";
 const btnGhost = "border border-border px-3 py-1.5 rounded text-xs hover:border-brand disabled:opacity-60";
 
+// A one-time set-up link, shown once so the admin can copy and send it.
+function SetupLinkBox({ url, expiresAt, name }: { url: string; expiresAt: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="bg-green-50 border border-green-300 rounded-lg p-3 text-xs space-y-1.5">
+      <p className="text-green-900 font-semibold">
+        Set-up link for {name}: send it to them directly (text or email). It works once and expires{" "}
+        {new Date(expiresAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}.
+      </p>
+      <div className="flex gap-2 items-center">
+        <input readOnly value={url} onFocus={(e) => e.target.select()} className="flex-1 border border-green-300 rounded px-2 py-1 bg-white font-mono text-[11px]" />
+        <button type="button" onClick={() => navigator.clipboard?.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })}
+          className="bg-green-700 text-white px-3 py-1 rounded font-semibold">{copied ? "Copied" : "Copy"}</button>
+      </div>
+      <p className="text-green-800">It won&apos;t be shown again. If it&apos;s lost, make a new one (the old one stops working).</p>
+    </div>
+  );
+}
+
 function PermissionPicker({ role, value, onChange }: { role: Role; value: Permission[]; onChange: (p: Permission[]) => void }) {
   if (role !== "ADMIN") return <p className="text-xs text-muted">Referees use the scoring portal only.</p>;
   return (
@@ -51,6 +70,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: User) => void }) {
   const [form, setForm] = useState({ name: "", email: "", role: "ADMIN" as Role, permissions: [] as Permission[], password: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [link, setLink] = useState<{ url: string; expiresAt: string; name: string } | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,11 +86,20 @@ function AddUserForm({ onCreated }: { onCreated: (u: User) => void }) {
     if (!res.ok) return setError(data.error ?? "Failed");
     onCreated(data);
     setForm({ name: "", email: "", role: "ADMIN", permissions: [], password: "" });
-    setOpen(false);
+    if (data.setupUrl) setLink({ url: data.setupUrl, expiresAt: data.setupExpiresAt, name: data.name });
+    else setOpen(false);
   };
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} className={btn}>+ Add user</button>;
+    return <button onClick={() => { setLink(null); setOpen(true); }} className={btn}>+ Add user</button>;
+  }
+  if (link) {
+    return (
+      <div className="space-y-2">
+        <SetupLinkBox {...link} />
+        <button onClick={() => { setLink(null); setOpen(false); }} className={btnGhost}>Done</button>
+      </div>
+    );
   }
 
   return (
@@ -104,9 +133,7 @@ function AddUserForm({ onCreated }: { onCreated: (u: User) => void }) {
           className={`${input} sm:w-72`}
         />
         <p className="text-[11px] text-muted mt-1">
-          Leave blank and they&apos;ll create their own password the first time they sign in. Anyone who knows the
-          username can do that first sign-in, so for administrators it&apos;s safer to set a temporary password and
-          send it to them privately.
+          Leave blank to get a one-time set-up link to send them (valid 7 days), so they choose their own password.
         </p>
       </div>
       <div className="flex gap-2 items-center">
@@ -125,6 +152,18 @@ function UserRow({ user, isSelf, onUpdated, onDeleted }: { user: User; isSelf: b
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null);
+
+  const makeLink = async () => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const res = await fetch(`/api/admin/users/${user.id}/setup-link`, { method: "POST" });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) return setError(data.error ?? "Failed");
+    setLink({ url: data.setupUrl, expiresAt: data.expiresAt });
+  };
 
   const patch = async (body: Record<string, unknown>, done?: string) => {
     setBusy(true);
@@ -140,6 +179,7 @@ function UserRow({ user, isSelf, onUpdated, onDeleted }: { user: User; isSelf: b
     if (!res.ok) return setError(data.error ?? "Failed");
     onUpdated({ ...user, ...data });
     setForm({ name: data.name, email: data.email, role: data.role, permissions: data.permissions });
+    if (data.setupUrl) setLink({ url: data.setupUrl, expiresAt: data.setupExpiresAt });
     if (done) setNotice(done);
   };
 
@@ -156,7 +196,7 @@ function UserRow({ user, isSelf, onUpdated, onDeleted }: { user: User; isSelf: b
   const status = !user.active
     ? { label: "Deactivated", cls: "bg-gray-100 border-gray-300 text-gray-600" }
     : user.mustSetPassword
-      ? { label: "Awaiting first sign-in", cls: "bg-amber-50 border-amber-300 text-amber-700" }
+      ? { label: "Waiting for set-up (send a link)", cls: "bg-amber-50 border-amber-300 text-amber-700" }
       : { label: "Active", cls: "bg-green-50 border-green-300 text-green-700" };
 
   return (
@@ -234,11 +274,16 @@ function UserRow({ user, isSelf, onUpdated, onDeleted }: { user: User; isSelf: b
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() => confirm(`Clear ${user.name}'s password? They'll create a new one the next time they sign in.`) && patch({ requirePasswordSetup: true }, "Password cleared.")}
+                    onClick={() => confirm(`Reset ${user.name}'s password? Their current one stops working and you'll get a set-up link to send them.`) && patch({ requirePasswordSetup: true }, "Password reset: send them the set-up link below.")}
                     className={btnGhost}
                   >
-                    Clear password (set at next sign-in)
+                    Reset with a set-up link
                   </button>
+                  {user.mustSetPassword && user.active && (
+                    <button disabled={busy} onClick={makeLink} className={btnGhost}>
+                      New set-up link
+                    </button>
+                  )}
                   <button disabled={busy} onClick={() => patch({ revokeSessions: true }, "Signed out everywhere.")} className={btnGhost}>
                     Sign out everywhere
                   </button>
@@ -271,6 +316,7 @@ function UserRow({ user, isSelf, onUpdated, onDeleted }: { user: User; isSelf: b
             </div>
           )}
 
+          {link && <SetupLinkBox url={link.url} expiresAt={link.expiresAt} name={user.name} />}
           {error && <p className="text-xs text-red-600">{error}</p>}
           {notice && <p className="text-xs text-green-700">{notice}</p>}
           <p className="text-[11px] text-muted">Created {fmt(user.createdAt)}</p>
