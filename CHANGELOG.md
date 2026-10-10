@@ -11,6 +11,8 @@ passed on to the club. Versions are the short git commit shown in the site foote
   scoring console now load only what they show (team names, scores, events,
   players' names and shirt numbers), not team contact details or players'
   dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
 - **Tighter admin checks**: every admin page checks sign-in itself; referee
   logins can only be created or removed by administrators who manage users,
   and referees with games are kept (deactivated) rather than deleted;
