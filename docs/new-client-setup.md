@@ -161,6 +161,7 @@ In the Vercel dashboard for the new project, add these under **Settings → Envi
 | `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API keys | Sessions only |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe Dashboard → Developers → API keys | Sessions only |
 | `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks (step 8) | Sessions only |
+| `BANK_DETAILS_KEY` | `openssl rand -base64 32` (keep it secret; losing it means re-entering referees' bank details) | Always: encrypts referees' bank details |
 | `SMTP_HOST` | Email provider | Booking emails only |
 | `SMTP_PORT` | Email provider | Booking emails only |
 | `SMTP_USER` | Email provider | Booking emails only |
