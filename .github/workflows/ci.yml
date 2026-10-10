@@ -314,13 +314,16 @@ jobs:
         run: |
           DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
           fails=0
+          # The grant: Manage-users admins get payroll; others don't; re-running adds no duplicates.
           psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
           INSERT INTO "User"(id, email, "passwordHash", name, role, permissions) VALUES
-            ('ci-pay1', 'ci-pay1@test', 'x', 'Users Admin', 'ADMIN', '{MANAGE_USERS}');
+            ('ci-pay1', 'ci-pay1@test', 'x', 'Users Admin', 'ADMIN', '{MANAGE_USERS}'),
+            ('ci-pay2', 'ci-pay2@test', 'x', 'Plain Admin', 'ADMIN', '{VIEW_AUDIT}');
           SQL
-          # This release's migrations add MANAGE_PAYROLL but give it to nobody yet.
-          n=$(psql "$DB" -tAc "SELECT count(*) FROM \"User\" WHERE 'MANAGE_PAYROLL' = ANY(permissions)")
-          [ "$n" = 0 ] && echo "ok   nobody holds MANAGE_PAYROLL after migrating" || { echo "FAIL $n user(s) hold MANAGE_PAYROLL after migrating"; fails=$((fails+1)); }
+          psql "$DB" -v ON_ERROR_STOP=1 -q -f prisma/manual-migrations/20261012_grant_payroll.sql
+          psql "$DB" -v ON_ERROR_STOP=1 -q -f prisma/manual-migrations/20261012_grant_payroll.sql
+          got=$(psql "$DB" -tAc "SELECT id || '=' || array_to_string(permissions, ',') FROM \"User\" WHERE id IN ('ci-pay1','ci-pay2') ORDER BY id" | tr '\n' ' ')
+          [ "$got" = "ci-pay1=MANAGE_USERS,MANAGE_PAYROLL ci-pay2=VIEW_AUDIT " ] && echo "ok   grant: $got" || { echo "FAIL grant: $got"; fails=$((fails+1)); }
           # Automatic rollback runs the previous release against this schema: its
           # Prisma client must still load every user (it throws on enum values it doesn't know).
           # (Own worktree and install: the migration step's /tmp/base shares this branch's client.)
