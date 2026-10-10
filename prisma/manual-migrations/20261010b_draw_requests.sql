@@ -4,8 +4,7 @@
 -- diff --from-config-datasource --to-schema prisma/schema.prisma --script`
 -- against a restored copy of production. Additive (new enum + table).
 --
--- Apply (after a pg_dump):
---   docker exec -i wagga-futsal-db psql -U futsal -d futsal -v ON_ERROR_STOP=1 < this-file.sql
+-- Applied by hand before scripts/migrate.mjs existed (see _baseline.txt).
 
 -- CreateEnum
 CREATE TYPE "DrawRequestKind" AS ENUM ('MATCH_DATE', 'TEAM_BYE');

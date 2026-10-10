@@ -224,7 +224,7 @@ export default function ScorerConsole({ fixture: initial }: { fixture: Fixture }
                 <span>{EVENT_ICONS[e.type]}</span>
                 <span className="font-semibold text-navy">{e.playerName ?? "—"}</span>
                 <span className="text-muted text-xs">{e.team.name}</span>
-                <span className="ml-auto text-muted text-xs">{e.minute}' H{e.half}</span>
+                <span className="ml-auto text-muted text-xs">{e.minute}&apos; H{e.half}</span>
               </div>
             ))}
           </div>

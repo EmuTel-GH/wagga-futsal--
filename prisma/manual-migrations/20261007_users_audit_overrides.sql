@@ -7,8 +7,7 @@
 -- against a restored copy of production. Purely additive: nothing is dropped
 -- or rewritten, and the previous app version runs unchanged against it.
 --
--- Apply (after a pg_dump):
---   docker exec -i wagga-futsal-db psql -U futsal -d futsal -v ON_ERROR_STOP=1 < this-file.sql
+-- Applied by hand before scripts/migrate.mjs existed (see _baseline.txt).
 
 -- CreateEnum
 CREATE TYPE "Permission" AS ENUM ('MANAGE_USERS', 'OVERRIDE_RULES', 'VIEW_AUDIT');

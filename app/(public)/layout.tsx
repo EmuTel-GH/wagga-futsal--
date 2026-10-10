@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import VersionTag from "@/components/VersionTag";
 import Link from "next/link";
 import Image from "next/image";
 import MyTeamsWidget from "@/components/public/MyTeamsWidget";
@@ -82,6 +84,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         </div>
         <div className="border-t border-white/10 text-center py-4 text-xs">
           © {new Date().getFullYear()} Wagga Futsal Pty Ltd. All rights reserved.
+          <Suspense fallback={null}>
+            <VersionTag className="ml-2 text-white/30" />
+          </Suspense>
         </div>
       </footer>
     </>

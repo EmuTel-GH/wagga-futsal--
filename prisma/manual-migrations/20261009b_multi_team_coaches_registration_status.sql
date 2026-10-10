@@ -8,10 +8,7 @@
 -- legacy TeamOfficial.teamId column is kept (no longer written) so the
 -- previous app version still runs.
 --
--- Apply AFTER 20261009_draw_options_split.sql (and a pg_dump):
---   docker exec -i wagga-futsal-db psql -U futsal -d futsal -v ON_ERROR_STOP=1 < this-file.sql
-
-BEGIN;
+-- Applied by hand before scripts/migrate.mjs existed (see _baseline.txt).
 
 -- AlterTable
 ALTER TABLE "Player" ADD COLUMN     "pfImportedAt" TIMESTAMP(3),
@@ -45,4 +42,3 @@ FROM "TeamOfficial"
 WHERE "teamId" IS NOT NULL
 ON CONFLICT ("teamId", "officialId") DO NOTHING;
 
-COMMIT;
