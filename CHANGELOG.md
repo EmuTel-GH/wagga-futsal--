@@ -3,6 +3,10 @@
 One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
+## 2026-10-12
+- **Payroll access**: administrators who manage users now have the Manage
+  payroll permission.
+
 ## 2026-10-11
 - **Tidy-ups**: the bank payment (ABA) file's header is laid out to the
   banking standard and names are cleaned to characters banks accept; calendar
