@@ -4,8 +4,7 @@
 -- diff --from-config-datasource --to-schema prisma/schema.prisma --script`
 -- against a restored copy of production. Additive (two nullable columns).
 --
--- Apply (after a pg_dump):
---   docker exec -i wagga-futsal-db psql -U futsal -d futsal -v ON_ERROR_STOP=1 < this-file.sql
+-- Applied by hand before scripts/migrate.mjs existed (see _baseline.txt).
 
 -- AlterTable
 ALTER TABLE "Competition" ADD COLUMN     "finalsGrandFinalAt" TIMESTAMP(3),

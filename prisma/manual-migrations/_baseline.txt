@@ -1,0 +1,10 @@
+# Migrations applied by hand to production (and staging, a copy of it)
+# before scripts/migrate.mjs existed. On its first run against such a
+# database, migrate.mjs records these as applied WITHOUT running them.
+# Never add to this list: new migrations are applied automatically.
+20261007_users_audit_overrides.sql
+20261007b_draft_fixtures_breaks.sql
+20261009_draw_options_split.sql
+20261009b_multi_team_coaches_registration_status.sql
+20261010_grand_final_plan.sql
+20261010b_draw_requests.sql

@@ -29,12 +29,18 @@ export default function TeamSearch({ placeholder = "Find your team…", stayOnPa
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => {
-    if (query.length < 2) {
+  // Typing: under 2 characters clears the results straight away (no fetch).
+  const changeQuery = (q: string) => {
+    setQuery(q);
+    if (q.length < 2) {
       setResults([]);
       setOpen(false);
-      return;
     }
+  };
+
+  // Under 2 characters: results are cleared by changeQuery, nothing to fetch.
+  useEffect(() => {
+    if (query.length < 2) return;
     const timer = setTimeout(async () => {
       setLoading(true);
       const res = await fetch(`/api/teams/search?q=${encodeURIComponent(query)}`);
@@ -52,7 +58,7 @@ export default function TeamSearch({ placeholder = "Find your team…", stayOnPa
       saveMyTeams([...current, { id: team.id, name: team.name }]);
     }
     setOpen(false);
-    setQuery("");
+    changeQuery("");
     if (!stayOnPage) router.push(`/teams/${team.id}`);
   };
 
@@ -63,7 +69,7 @@ export default function TeamSearch({ placeholder = "Find your team…", stayOnPa
         <input
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => changeQuery(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder={placeholder}
           className="w-full bg-white/10 hover:bg-white/15 focus:bg-white/20 text-white placeholder-white/40 border border-white/20 focus:border-brand rounded-xl pl-11 pr-4 py-3.5 outline-none transition-all text-sm"
