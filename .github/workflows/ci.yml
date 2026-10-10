@@ -49,23 +49,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Prove the deployer's migration step works inside the real image:
-      # `pg` resolves from the standalone node_modules, and on a database shaped
-      # like production (schema already there) it records the baseline and
-      # applies nothing that's already applied.
-      - name: Migration runner works inside the image
+      # Rebuild what the server has (the target branch's schema, with its
+      # migrations recorded as applied), run THIS image's migration step on it
+      # exactly as the deployer would, then check the result matches this PR's
+      # schema.prisma. Proves pg resolves in the standalone image, new
+      # migration files apply cleanly, and they produce the declared schema.
+      - name: Migrations apply on the deployed shape and match schema.prisma
         env:
+          BASE: ${{ github.base_ref }}
           DATABASE_URL: postgresql://postgres:ci@localhost:5432/prodshape
         run: |
           psql "postgresql://postgres:ci@localhost:5432/postgres" -c "CREATE DATABASE prodshape"
-          npx prisma db push
+          git fetch --depth=1 origin "$BASE"
+          git worktree add /tmp/base FETCH_HEAD
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/base/node_modules
+          (cd /tmp/base && npx prisma db push)
+          MIGRATIONS_DIR=/tmp/base/prisma/manual-migrations node scripts/migrate.mjs --baseline-all
           out=$(docker run --rm --network host -e DATABASE_URL="postgresql://postgres:ci@127.0.0.1:5432/prodshape" wagga-futsal:ci node scripts/migrate.mjs)
           echo "$out"
-          baseline=$(grep -v '^#' prisma/manual-migrations/_baseline.txt | grep -c .)
-          echo "$out" | grep -q "baseline: recorded $baseline file(s)"
+          for f in $(comm -13 <(ls /tmp/base/prisma/manual-migrations/*.sql | xargs -n1 basename | sort) <(ls prisma/manual-migrations/*.sql | xargs -n1 basename | sort)); do
+            echo "$out" | grep -q "applying $f" || { echo "expected $f to be applied"; exit 1; }
+          done
           again=$(docker run --rm --network host -e DATABASE_URL="postgresql://postgres:ci@127.0.0.1:5432/prodshape" wagga-futsal:ci node scripts/migrate.mjs)
-          echo "$again"
           echo "$again" | grep -q "up to date"
+          # The runner's own bookkeeping table isn't in schema.prisma; set it
+          # aside for the comparison (this is a throwaway CI database).
+          psql "$DATABASE_URL" -qc 'CREATE SCHEMA ci_aside; ALTER TABLE "_app_migrations" SET SCHEMA ci_aside' 
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code \
+            || { echo "The database after migrations doesn't match schema.prisma: a migration file is missing or wrong"; exit 1; }
 
       - name: Image serves /api/health
         run: |
@@ -248,3 +259,51 @@ jobs:
           [[ "$t" =~ ^[A-Za-z0-9_-]{43}$ ]] && echo "ok   session token is 256-bit random" || { echo "FAIL session token looks like: ${t:0:8}… ($r)"; fails=$((fails+1)); }
           docker rm -f prd5 >/dev/null
           [ "$fails" = 0 ] || exit 1
+      # One-time password set-up links (replacing username-only first sign-in).
+      - name: Account set-up links
+        run: |
+          docker run -d --name prd2 --network host -e PORT=3996 -e APP_URL=http://localhost:3996 -e DATABASE_URL=postgresql://postgres:ci@127.0.0.1:5432/prodshape -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3996/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3996; A="Cookie: session=admintoken"; J="Content-Type: application/json"
+          psql postgresql://postgres:ci@127.0.0.1:5432/prodshape -qc "UPDATE \"User\" SET permissions='{MANAGE_USERS}' WHERE id='ci-admin'"
+          fail() { echo "FAIL: $*"; exit 1; }
+          tok() { sed -n 's/.*token=\([A-Za-z0-9_-]*\).*/\1/p'; }
+          login() { curl -s -o /tmp/l.json -w "%{http_code}" -H "$J" -d "{\"email\":\"$1\",\"password\":\"$2\"}" $B/api/auth/login; }
+          setpw() { curl -s -o /tmp/s.json -w "%{http_code}" -H "$J" -d "{\"token\":\"$1\",\"password\":\"$2\"}" $B/api/auth/set-password; }
+
+          # A user created without a password gets a link, not a claimable account.
+          r=$(curl -s -H "$A" -H "$J" -d '{"name":"New Ref","email":"new.ref","role":"REFEREE"}' $B/api/admin/users)
+          echo "$r" | grep -q '"setupUrl":"http://localhost:3996/referee/login/setup?token=' || fail "no setup link: $r"
+          T1=$(echo "$r" | tok); uid=$(echo "$r" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+
+          # Login says the same thing for needs-setup, wrong password and unknown users.
+          [ "$(login new.ref '')" = 400 ] || [ "$(login new.ref '')" = 401 ] || fail "blank password login"
+          [ "$(login new.ref 'whatever-password')" = 401 ] || fail "needs-setup login status"; b1=$(cat /tmp/l.json)
+          [ "$(login nobody.here 'whatever-password')" = 401 ] || fail "unknown login status"; b2=$(cat /tmp/l.json)
+          [ "$(login ci-admin@test 'wrong-password')" = 401 ] || fail "wrong password status"; b3=$(cat /tmp/l.json)
+          [ "$b1" = "$b2" ] && [ "$b2" = "$b3" ] || fail "login responses differ: $b1 / $b2 / $b3"
+          echo "ok   needs-setup, unknown and wrong-password logins are indistinguishable"
+
+          # Only the hash is stored.
+          [ "$(psql postgresql://postgres:ci@127.0.0.1:5432/prodshape -tAc "SELECT count(*) FROM \"PasswordSetupToken\" WHERE \"tokenHash\"='$T1'")" = 0 ] || fail "raw token stored"
+
+          [ "$(setpw not-a-token 'long-enough-password')" = 400 ] || fail "bad token accepted"
+          [ "$(setpw "$T1" 'short')" = 400 ] || fail "short password accepted"
+          [ "$(setpw "$T1" 'long-enough-password')" = 200 ] || fail "valid link refused: $(cat /tmp/s.json)"
+          [ "$(setpw "$T1" 'another-long-password')" = 400 ] || fail "link worked twice"
+          [ "$(login new.ref 'long-enough-password')" = 200 ] || fail "can't sign in with the new password"
+          echo "ok   link sets the password once, then the account signs in normally"
+
+          # A new link replaces the old one; expired links fail.
+          T2=$(curl -s -X POST -H "$A" $B/api/admin/users/$uid/setup-link | tok)
+          T3=$(curl -s -X POST -H "$A" $B/api/admin/users/$uid/setup-link | tok)
+          [ "$(setpw "$T2" 'long-enough-password-2')" = 400 ] || fail "old link still works after a new one"
+          psql postgresql://postgres:ci@127.0.0.1:5432/prodshape -qc "UPDATE \"PasswordSetupToken\" SET \"expiresAt\" = now() - interval '1 minute'"
+          [ "$(setpw "$T3" 'long-enough-password-3')" = 400 ] || fail "expired link accepted"
+          echo "ok   new link invalidates the old; expired links fail"
+
+          # Clearing a password returns a link; non-admins can't make links.
+          curl -s -X PATCH -H "$A" -H "$J" -d '{"requirePasswordSetup":true}' $B/api/admin/users/$uid | grep -q '"setupUrl"' || fail "reset gives no link"
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Cookie: session=reftoken' $B/api/admin/users/$uid/setup-link)" = 401 ] || fail "referee made a link"
+          echo "ok   reset returns a link; only user managers can make links"
+          docker rm -f prd2 >/dev/null

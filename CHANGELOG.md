@@ -13,6 +13,10 @@ passed on to the club. Versions are the short git commit shown in the site foote
   dates of birth.
 - **Security updates**: the web framework and its image tools updated to the
   latest secure versions; two unused components removed.
+- **Safer account set-up**: new accounts and password resets now use a
+  one-time set-up link that an administrator creates on the Users page and
+  sends to the person (valid 7 days, works once). Referees still waiting to
+  set a password need a link from an administrator.
 - **Tighter admin checks**: every admin page checks sign-in itself; referee
   logins can only be created or removed by administrators who manage users,
   and referees with games are kept (deactivated) rather than deleted;
