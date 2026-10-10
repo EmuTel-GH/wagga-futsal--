@@ -327,8 +327,9 @@ jobs:
           # Automatic rollback runs the previous release against this schema: its
           # Prisma client must still load users who hold the new permission.
           if [ -n "$BASE" ]; then
-            git fetch -q --depth=1 origin "$BASE" && git worktree add -q /tmp/base FETCH_HEAD
-            (cd /tmp/base && npm ci --no-audit --no-fund --loglevel=error >/dev/null && npx prisma generate >/dev/null \
+          # (Its own worktree and install: the migration step's /tmp/base shares this branch's client.)
+            git fetch -q --depth=1 origin "$BASE" && git worktree add -q /tmp/prev FETCH_HEAD
+            (cd /tmp/prev && npm ci --no-audit --no-fund --loglevel=error >/dev/null && npx prisma generate >/dev/null \
               && printf '%s\n' 'import { prisma } from "./lib/prisma";' \
                  'const u = await prisma.user.findUnique({ where: { id: "ci-pay1" }, select: { permissions: true } });' \
                  'console.log(JSON.stringify(u));' 'await prisma.$disconnect();' > oldread.mts \
