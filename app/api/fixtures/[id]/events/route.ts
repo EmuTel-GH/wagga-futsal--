@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireReferee } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import type { Prisma } from "@prisma/client";
+import { fixtureAccess, validateEvent } from "@/lib/fixtureAccess";
+import { callerFor } from "@/lib/callerContext";
 type EventType = "GOAL" | "YELLOW_CARD" | "RED_CARD" | "FOUL";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,9 +24,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const fixture = await prisma.fixture.findUnique({ where: { id: fixtureId } });
   if (!fixture) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
-  if (fixture.status === "DRAFT") {
-    return NextResponse.json({ error: "This fixture hasn't been published yet" }, { status: 409 });
-  }
+  // Only the assigned referee/scorer (or an admin); finished games: admins only.
+  const access = fixtureAccess(await callerFor(session), fixture);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  const invalid = validateEvent({ teamId, type, minute, half }, fixture);
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
+  // A named player must actually be in that team's squad.
+  const validPlayerId =
+    playerId && (await prisma.teamPlayer.findFirst({ where: { teamId, playerId: String(playerId) }, select: { id: true } }))
+      ? String(playerId)
+      : null;
 
   // Create the event
   const event = await prisma.matchEvent.create({
@@ -37,7 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       half: Number(half ?? 1),
       playerName: playerName ?? null,
       jerseyNumber: jerseyNumber ? Number(jerseyNumber) : null,
-      playerId: playerId ?? null,
+      playerId: validPlayerId,
     },
     include: { team: true },
   });
