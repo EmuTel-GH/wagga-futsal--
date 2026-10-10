@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, hasPermission } from "@/lib/auth";
+import { requireAdmin, requirePermission, hasPermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { maskBank, sealBank } from "@/lib/bankDetails";
 
 type Params = { params: Promise<{ id: string }> };
 
 // Set (or { clear: true } remove) a referee's bank details. They're encrypted
-// before saving and only ever returned masked.
+// before saving and only ever returned masked. Needs MANAGE_PAYROLL, since
+// the ABA pay file pays into these accounts.
 export async function PATCH(req: Request, { params }: Params) {
   let session;
   try {
-    session = await requireAdmin();
+    session = await requirePermission("MANAGE_PAYROLL");
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

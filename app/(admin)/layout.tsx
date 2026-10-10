@@ -15,13 +15,13 @@ const NAV = [
   { href: "/admin/fixtures", label: "Fixtures" },
   { href: "/admin/referees", label: "Referees" },
   { href: "/admin/sessions", label: "Sessions" },
-  { href: "/admin/payroll", label: "Payroll" },
   { href: "/admin/sponsors", label: "Sponsors" },
   { href: "/admin/rules", label: "Rules" },
 ];
 
 // Shown only to administrators holding the matching permission.
 const RESTRICTED_NAV = [
+  { href: "/admin/payroll", label: "Payroll", permission: "MANAGE_PAYROLL" },
   { href: "/admin/users", label: "Users", permission: "MANAGE_USERS" },
   { href: "/admin/audit", label: "Audit log", permission: "VIEW_AUDIT" },
 ] as const;

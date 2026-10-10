@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
+import { validateRates } from "@/lib/payRates";
 import { audit } from "@/lib/audit";
 import { generateABA } from "@/lib/aba";
 import { maskBank, openBank } from "@/lib/bankDetails";
@@ -11,7 +12,7 @@ const SENIOR_GROUPS = ["U16", "U19", "OPENS", "SOCIAL"];
 const isSenior = (ageGroup: string) => SENIOR_GROUPS.includes(ageGroup);
 
 export async function GET(req: Request) {
-  try { await requireAdmin(); } catch {
+  try { await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   let session;
-  try { session = await requireAdmin(); } catch {
+  try { session = await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -167,16 +168,18 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   let session;
-  try { session = await requireAdmin(); } catch {
+  try { session = await requirePermission("MANAGE_PAYROLL"); } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents } = await req.json();
+  const checked = validateRates(await req.json().catch(() => null));
+  if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: 400 });
+  const { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents } = checked.rates;
 
   const rate = await prisma.payRate.upsert({
     where: { id: "default" },
-    create: { id: "default", fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
-    update: { fieldRefCents, scorerCents, fieldRefSeniorCents, scorerSeniorCents },
+    create: { id: "default", ...checked.rates },
+    update: checked.rates,
   });
 
   await audit(session, {
