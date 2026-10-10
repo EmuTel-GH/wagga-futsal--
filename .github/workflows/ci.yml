@@ -72,6 +72,9 @@ jobs:
           done
           again=$(docker run --rm --network host -e DATABASE_URL="postgresql://postgres:ci@127.0.0.1:5432/prodshape" wagga-futsal:ci node scripts/migrate.mjs)
           echo "$again" | grep -q "up to date"
+          # The runner's own bookkeeping table isn't in schema.prisma; set it
+          # aside for the comparison (this is a throwaway CI database).
+          psql "$DATABASE_URL" -qc 'CREATE SCHEMA ci_aside; ALTER TABLE "_app_migrations" SET SCHEMA ci_aside' 
           npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code \
             || { echo "The database after migrations doesn't match schema.prisma: a migration file is missing or wrong"; exit 1; }
 
