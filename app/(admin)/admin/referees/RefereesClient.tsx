@@ -92,7 +92,7 @@ function BankEditor({ referee, onSaved }: { referee: Referee; onSaved: (r: Refer
   );
 }
 
-export default function RefereesClient({ initialReferees }: { initialReferees: Referee[] }) {
+export default function RefereesClient({ initialReferees, canEditBank }: { initialReferees: Referee[]; canEditBank: boolean }) {
   const [referees, setReferees] = useState<Referee[]>(initialReferees);
 
   const handleCreated = (r: Referee) => setReferees((prev) => [...prev, r]);
@@ -147,10 +147,12 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
                       <div className="flex flex-col gap-1">
                         <span className="text-xs text-muted">{r.bsb} · {r.accountNumber}</span>
                         {r.accountName && <span className="text-xs text-muted">{r.accountName}</span>}
-                        <BankEditor referee={r} onSaved={handleBankSaved} />
+                        {canEditBank && <BankEditor referee={r} onSaved={handleBankSaved} />}
                       </div>
-                    ) : (
+                    ) : canEditBank ? (
                       <BankEditor referee={r} onSaved={handleBankSaved} />
+                    ) : (
+                      <span className="text-xs text-muted">Not set</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5">

@@ -71,6 +71,8 @@ enum Permission {
   OVERRIDE_RULES
   // Read the audit log.
   VIEW_AUDIT
+  // Pay rates, the ABA pay file, and referees' bank details.
+  MANAGE_PAYROLL
 }
 
 // Who did what, and when. Written for every change made by a signed-in user

@@ -56,6 +56,12 @@ is green and you've tested it, merge (and promote) without waiting.
   rollback runs the old code on the new schema): add columns as nullable or with
   a default, add tables freely, and only drop or rename in a later release once
   no deployed code uses the old shape.
+  - **New enum values: add them in one release, store them in a later one.**
+    An older Prisma client throws on any enum value it doesn't know, so a row
+    holding a new value breaks the previous release. Add the value (in its own
+    file: `ALTER TYPE … ADD VALUE` can't be used in the same transaction); only
+    after that release is live in production may a migration or the app write
+    it. CI's payroll step shows the failure.
 - Fresh empty database (new environment): `prisma db push`, then
   `node scripts/migrate.mjs --baseline-all`.
 

@@ -17,6 +17,11 @@ passed on to the club. Versions are the short git commit shown in the site foote
   one-time set-up link that an administrator creates on the Users page and
   sends to the person (valid 7 days, works once). Referees still waiting to
   set a password need a link from an administrator.
+- **Payroll permission**: pay rates, the ABA pay file and referees' bank
+  details now need a new "Manage payroll" permission. Administrators who
+  manage users get it in the next update (or tick it on the Users page).
+  Pay rates must be whole-cent amounts between $0 and $1,000. Every bank
+  detail change is recorded in the audit log.
 - **Tighter admin checks**: every admin page checks sign-in itself; referee
   logins can only be created or removed by administrators who manage users,
   and referees with games are kept (deactivated) rather than deleted;

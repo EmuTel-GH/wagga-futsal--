@@ -307,3 +307,54 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Cookie: session=reftoken' $B/api/admin/users/$uid/setup-link)" = 401 ] || fail "referee made a link"
           echo "ok   reset returns a link; only user managers can make links"
           docker rm -f prd2 >/dev/null
+
+      - name: Payroll permission (and the previous release still reads every user)
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          fails=0
+          psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+          INSERT INTO "User"(id, email, "passwordHash", name, role, permissions) VALUES
+            ('ci-pay1', 'ci-pay1@test', 'x', 'Users Admin', 'ADMIN', '{MANAGE_USERS}');
+          SQL
+          # This release's migrations add MANAGE_PAYROLL but give it to nobody yet.
+          n=$(psql "$DB" -tAc "SELECT count(*) FROM \"User\" WHERE 'MANAGE_PAYROLL' = ANY(permissions)")
+          [ "$n" = 0 ] && echo "ok   nobody holds MANAGE_PAYROLL after migrating" || { echo "FAIL $n user(s) hold MANAGE_PAYROLL after migrating"; fails=$((fails+1)); }
+          # Automatic rollback runs the previous release against this schema: its
+          # Prisma client must still load every user (it throws on enum values it doesn't know).
+          # (Own worktree and install: the migration step's /tmp/base shares this branch's client.)
+          if [ -n "$BASE" ]; then
+            git fetch -q --depth=1 origin "$BASE" && git worktree add -q /tmp/prev FETCH_HEAD
+            (cd /tmp/prev && npm ci --no-audit --no-fund --loglevel=error >/dev/null && npx prisma generate >/dev/null \
+              && printf '%s\n' 'import { prisma } from "./lib/prisma";' \
+                 'const u = await prisma.user.findMany({ select: { id: true, permissions: true } });' \
+                 'console.log(JSON.stringify(u));' 'await prisma.$disconnect();' > oldread.mts \
+              && DATABASE_URL="$DB" npx tsx oldread.mts) > /tmp/oldread.out 2>&1 || true
+            grep -q '"permissions":\[' /tmp/oldread.out && echo "ok   $BASE's Prisma client still reads every user after these migrations" || { echo "FAIL $BASE's client can't read it:"; tail -20 /tmp/oldread.out; fails=$((fails+1)); }
+          fi
+          docker run -d --name prd6 --network host -e PORT=3992 -e APP_URL=http://localhost:3992 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3992/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3992; J="Content-Type: application/json"; A='Cookie: session=admintoken'
+          code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+          is() { if [ "$2" = "$1" ]; then echo "ok   $3 → $2"; else echo "FAIL $3 → $2 (wanted $1)"; fails=$((fails+1)); fi; }
+          rates='{"fieldRefCents":5000,"scorerCents":2500,"fieldRefSeniorCents":6000,"scorerSeniorCents":3000}'
+          psql "$DB" -qc "UPDATE \"User\" SET permissions='{MANAGE_USERS}' WHERE id='ci-admin'"
+          is 401 "$(code -H "$A" "$B/api/admin/payroll?from=2026-01-01&to=2026-12-31")" "payroll summary without Manage payroll"
+          is 401 "$(code -X PATCH -H "$A" -H "$J" -d "$rates" $B/api/admin/payroll)" "rate change without Manage payroll"
+          is 401 "$(code -H "$A" -H "$J" -d '{"from":"2026-01-01","to":"2026-12-31","orgBsb":"1","orgAccount":"1","orgName":"x","orgBank":"WBC","orgApcaId":"1"}' $B/api/admin/payroll)" "ABA export without Manage payroll"
+          is 401 "$(code -X PATCH -H "$A" -H "$J" -d '{"bsb":"062-000","accountNumber":"12345678","accountName":"Someone Else"}' $B/api/admin/referees/rH)" "bank-detail change without Manage payroll"
+          is 307 "$(code -H "$A" $B/admin/payroll)" "payroll page sends them back to the dashboard"
+          page=$(curl -s -H "$A" $B/admin/referees)
+          echo "$page" | grep -q 'Change bank details\|Add bank details' && { echo "FAIL referees page offers bank editing"; fails=$((fails+1)); } || echo "ok   referees page has no bank editing"
+          curl -s -H "$A" $B/admin | grep -q 'href="/admin/payroll"' && { echo "FAIL Payroll in the nav"; fails=$((fails+1)); } || echo "ok   no Payroll in the nav"
+          psql "$DB" -qc "UPDATE \"User\" SET permissions='{MANAGE_USERS,MANAGE_PAYROLL}' WHERE id='ci-admin'"
+          is 200 "$(code -H "$A" "$B/api/admin/payroll?from=2026-01-01&to=2026-12-31")" "payroll summary with Manage payroll"
+          is 200 "$(code -H "$A" $B/admin/payroll)" "payroll page with Manage payroll"
+          curl -s -H "$A" $B/admin | grep -q 'href="/admin/payroll"' && echo "ok   Payroll in the nav" || { echo "FAIL no Payroll in the nav"; fails=$((fails+1)); }
+          curl -s -H "$A" $B/admin/referees | grep -q 'Change bank details\|Add bank details' && echo "ok   referees page offers bank editing" || { echo "FAIL no bank editing with the permission"; fails=$((fails+1)); }
+          is 400 "$(code -X PATCH -H "$A" -H "$J" -d '{"fieldRefCents":-500,"scorerCents":2500,"fieldRefSeniorCents":6000,"scorerSeniorCents":3000}' $B/api/admin/payroll)" "negative rate refused"
+          is 400 "$(code -X PATCH -H "$A" -H "$J" -d '{"fieldRefCents":50.5,"scorerCents":2500,"fieldRefSeniorCents":6000,"scorerSeniorCents":3000}' $B/api/admin/payroll)" "fractional cents refused"
+          is 200 "$(code -X PATCH -H "$A" -H "$J" -d "$rates" $B/api/admin/payroll)" "valid rates saved"
+          docker rm -f prd6 >/dev/null
+          [ "$fails" = 0 ] || exit 1
