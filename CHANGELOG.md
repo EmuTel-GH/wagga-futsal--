@@ -4,6 +4,19 @@ One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
 ## 2026-10-11
+- **Scoring is limited to each game's officials**: only the referee or scorer
+  assigned to a game (or an administrator) can record its score and events,
+  and finished games can only be changed by an administrator.
+- **Less personal information on match pages**: live match pages and the
+  scoring console now load only what they show (team names, scores, events,
+  players' names and shirt numbers), not team contact details or players'
+  dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
+- **Safer account set-up**: new accounts and password resets now use a
+  one-time set-up link that an administrator creates on the Users page and
+  sends to the person (valid 7 days, works once). Referees still waiting to
+  set a password need a link from an administrator.
 - **Payroll permission**: pay rates, the ABA pay file and referees' bank
   details now need a new "Manage payroll" permission. Administrators who
   already manage users have it; give it to others from the Users page.

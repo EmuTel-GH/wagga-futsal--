@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { publicFixtureSelect } from "@/lib/publicFixture";
 import LiveMatchClient from "./LiveMatchClient";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +10,7 @@ export const dynamic = "force-dynamic";
 async function getFixture(id: string) {
   return prisma.fixture.findFirst({
     where: { id, status: { not: "DRAFT" } },
-    include: {
-      homeTeam: true,
-      awayTeam: true,
-      competition: true,
-      pitch: { include: { venue: true } },
-      events: { orderBy: { minute: "asc" }, include: { team: true } },
-    },
+    select: publicFixtureSelect, // public: no team contacts, notes or referee ids
   });
 }
 
