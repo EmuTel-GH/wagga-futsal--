@@ -142,3 +142,40 @@ jobs:
           expect 3997 /api/teams/x/calendar - 404 no
           docker rm -f stg prd >/dev/null
           [ "$fails" = 0 ] || { echo "$fails gate check(s) failed"; exit 1; }
+
+      # Only the assigned referee/scorer (or an admin) can change a fixture.
+      - name: Fixture scoring permissions
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+          INSERT INTO "User"(id, email, "passwordHash", name, role) VALUES ('ci-ref2', 'ci-ref2@test', 'x', 'CI Ref Two', 'REFEREE');
+          INSERT INTO "AuthSession"(id, "userId", token, "expiresAt") VALUES ('s5', 'ci-ref2', 'ref2token', now() + interval '1 day');
+          INSERT INTO "Referee"(id, "userId") VALUES ('r1', 'ci-ref'), ('r2', 'ci-ref2');
+          INSERT INTO "Competition"(id, name, season, "ageGroup") VALUES ('c1', 'CI Comp', '2026', 'U12');
+          INSERT INTO "Team"(id, name) VALUES ('tH', 'Home FC'), ('tA', 'Away FC'), ('tX', 'Other FC');
+          INSERT INTO "Fixture"(id, "competitionId", "homeTeamId", "awayTeamId", "scheduledAt", round, status, "fieldRefereeId", "updatedAt")
+            VALUES ('f1', 'c1', 'tH', 'tA', now(), 1, 'SCHEDULED', 'r1', now());
+          SQL
+          docker run -d --name prd3 --network host -e PORT=3995 -e APP_URL=http://localhost:3995 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3995/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3995; J="Content-Type: application/json"
+          fails=0
+          # code <curl args...> → HTTP status only (args passed as an array: no word splitting)
+          code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+          st() { code -X PATCH -H "$J" -H "Cookie: session=$1" -d "{\"status\":\"$2\"}" "$B/api/fixtures/f1/status"; }
+          ev() { code -X POST -H "$J" -H "Cookie: session=$1" -d "{\"teamId\":\"$2\",\"type\":\"GOAL\",\"minute\":5,\"half\":1}" "$B/api/fixtures/f1/events"; }
+          page() { code -H "Cookie: session=$1" "$B/referee/games/f1/score"; }
+          is() { if [ "$2" = "$1" ]; then echo "ok   $3 → $2"; else echo "FAIL $3 → $2 (wanted $1)"; fails=$((fails+1)); fi; }
+          is 403 "$(st ref2token LIVE)"       "other referee can't start the game"
+          is 403 "$(ev ref2token tH)"         "other referee can't add a goal"
+          is 404 "$(page ref2token)"          "other referee can't open the scorer page"
+          is 200 "$(page reftoken)"           "assigned referee opens the scorer page"
+          is 200 "$(st reftoken LIVE)"        "assigned referee starts the game"
+          is 400 "$(ev reftoken tX)"          "goal for a team that isn't playing"
+          is 201 "$(ev reftoken tH)"          "assigned referee adds a goal"
+          is 200 "$(st reftoken COMPLETED)"   "assigned referee completes the game"
+          is 403 "$(st reftoken LIVE)"        "referee can't reopen a finished game"
+          is 403 "$(ev reftoken tA)"          "referee can't add to a finished game"
+          is 200 "$(st admintoken LIVE)"      "admin can still correct a finished game"
+          docker rm -f prd3 >/dev/null
+          [ "$fails" = 0 ] || exit 1

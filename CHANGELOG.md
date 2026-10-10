@@ -4,6 +4,9 @@ One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
 ## 2026-10-11
+- **Scoring is limited to each game's officials**: only the referee or scorer
+  assigned to a game (or an administrator) can record its score and events,
+  and finished games can only be changed by an administrator.
 - **Security updates**: the web framework and its image tools updated to the
   latest secure versions; two unused components removed.
 

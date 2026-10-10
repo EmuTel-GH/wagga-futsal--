@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireReferee } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { maybeCreateGrandFinal } from "@/lib/finals";
+import { fixtureAccess } from "@/lib/fixtureAccess";
+import { callerFor } from "@/lib/callerContext";
 const VALID_STATUSES = ["SCHEDULED", "LIVE", "COMPLETED", "FORFEITED_HOME", "FORFEITED_AWAY", "ABANDONED"] as const;
 type FixtureStatus = typeof VALID_STATUSES[number];
 
@@ -21,11 +23,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const current = await prisma.fixture.findUnique({ where: { id }, select: { status: true } });
+  const current = await prisma.fixture.findUnique({ where: { id }, select: { status: true, fieldRefereeId: true, scorerId: true } });
   if (!current) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
-  if (current.status === "DRAFT") {
-    return NextResponse.json({ error: "This fixture hasn't been published yet" }, { status: 409 });
-  }
+  // Only the assigned referee/scorer (or an admin); finished games: admins only.
+  const access = fixtureAccess(await callerFor(session), current);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const fixture = await prisma.fixture.update({
     where: { id },
