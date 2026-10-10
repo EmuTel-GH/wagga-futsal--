@@ -7,6 +7,10 @@ passed on to the club. Versions are the short git commit shown in the site foote
 - **Scoring is limited to each game's officials**: only the referee or scorer
   assigned to a game (or an administrator) can record its score and events,
   and finished games can only be changed by an administrator.
+- **Less personal information on match pages**: live match pages and the
+  scoring console now load only what they show (team names, scores, events,
+  players' names and shirt numbers), not team contact details or players'
+  dates of birth.
 - **Security updates**: the web framework and its image tools updated to the
   latest secure versions; two unused components removed.
 
