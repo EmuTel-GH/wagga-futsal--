@@ -23,8 +23,9 @@ function SetupForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
-    const data = await res.json();
     setLoading(false);
+    if (res.status === 429) return setError("Too many attempts. Please wait a minute, then try again.");
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) return setError(data.error ?? "Couldn't set your password");
     router.push(data.role === "ADMIN" ? "/admin" : "/referee/games");
   };

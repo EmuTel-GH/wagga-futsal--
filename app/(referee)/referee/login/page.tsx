@@ -19,8 +19,13 @@ export default function RefereeLoginPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
     setLoading(false);
+    // Too many attempts from this connection: the proxy answers 429 (maybe not JSON).
+    if (res.status === 429) {
+      setError("Too many sign-in attempts. Please wait a minute, then try again.");
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Login failed");
       return;
