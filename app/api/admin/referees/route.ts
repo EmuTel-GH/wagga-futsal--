@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { maskBank } from "@/lib/bankDetails";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
@@ -19,7 +20,7 @@ export async function GET() {
     orderBy: { user: { name: "asc" } },
   });
 
-  return NextResponse.json(referees);
+  return NextResponse.json(referees.map((r) => ({ ...r, ...maskBank(r) })));
 }
 
 export async function POST(req: Request) {

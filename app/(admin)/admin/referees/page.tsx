@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { maskBank } from "@/lib/bankDetails";
 import RefereesClient from "./RefereesClient";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export default async function RefereesPage() {
   return (
     <div>
       <h1 className="text-2xl font-black text-navy mb-6">Referees</h1>
-      <RefereesClient initialReferees={referees} />
+      {/* Bank details go to the browser masked only (see lib/bankDetails). */}
+      <RefereesClient initialReferees={referees.map((r) => ({ ...r, ...maskBank(r) }))} />
     </div>
   );
 }
