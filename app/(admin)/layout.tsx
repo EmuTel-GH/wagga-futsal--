@@ -4,6 +4,8 @@ import Image from "next/image";
 import { requireAdmin, hasPermission, type AuthSession } from "@/lib/auth";
 import LogoutButton from "@/components/referee/LogoutButton";
 import AdminNav from "@/components/admin/AdminNav";
+import VersionTag from "@/components/VersionTag";
+import { Suspense } from "react";
 
 const NAV = [
   { href: "/admin", label: "Dashboard" },
@@ -51,6 +53,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {session.user.name}
           </Link>
           <LogoutButton />
+          <Suspense fallback={null}>
+            <VersionTag className="block text-[10px] text-white/30" />
+          </Suspense>
         </div>
       </aside>
 

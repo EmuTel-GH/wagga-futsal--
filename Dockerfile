@@ -25,6 +25,9 @@ ENV DATABASE_URL=postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
 # The publishable key must be in the browser bundle, so it is baked here.
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+# Short git sha, set by CI; shown in the footer and /api/health.
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 RUN npm run build
 
 FROM node:24-slim AS runtime
@@ -37,8 +40,12 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
+# Run by the deployer before switching to this version (applies prisma/manual-migrations).
+COPY --from=build --chown=nextjs:nodejs /app/scripts/migrate.mjs ./scripts/migrate.mjs
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]

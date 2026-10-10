@@ -5,9 +5,13 @@ import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Book a Session" };
 
+// Sessions that started within the last 3 hours still show (covers in-progress ones).
+function sessionsCutoff() {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000);
+}
+
 export default async function SessionsPage() {
-  // Show sessions that started within the last 3 hours (covers in-progress sessions)
-  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const cutoff = sessionsCutoff();
   const sessions = await prisma.futsalSession.findMany({
     where: { status: { in: ["OPEN", "FULL"] }, scheduledAt: { gte: cutoff } },
     include: {
