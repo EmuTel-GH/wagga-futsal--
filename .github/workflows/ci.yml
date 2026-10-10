@@ -179,3 +179,21 @@ jobs:
           is 200 "$(st admintoken LIVE)"      "admin can still correct a finished game"
           docker rm -f prd3 >/dev/null
           [ "$fails" = 0 ] || exit 1
+
+      - name: Security headers, bookings off
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          docker run -d --name prd7 --network host -e PORT=3991 -e APP_URL=http://localhost:3991 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3991/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3991; fails=0
+          h=$(curl -s -D - -o /dev/null $B/ | tr -d '\r')
+          for want in "strict-transport-security: max-age" "x-frame-options: DENY" "x-content-type-options: nosniff" "referrer-policy:" "content-security-policy: default-src 'self'"; do
+            echo "$h" | grep -qi "^$want" && echo "ok   $want" || { echo "FAIL missing $want"; fails=$((fails+1)); }
+          done
+          echo "$h" | grep -qi "^x-powered-by" && { echo "FAIL x-powered-by is sent"; fails=$((fails+1)); } || echo "ok   no x-powered-by"
+          for p in /api/sessions/x/book /api/webhooks/stripe; do
+            c=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{}' $B$p)
+            [ "$c" = 404 ] && echo "ok   $p → 404 while bookings are off" || { echo "FAIL $p → $c"; fails=$((fails+1)); }
+          done
+          docker rm -f prd7 >/dev/null
+          [ "$fails" = 0 ] || exit 1
