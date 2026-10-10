@@ -333,7 +333,7 @@ jobs:
               && printf '%s\n' 'import { prisma } from "./lib/prisma";' \
                  'const u = await prisma.user.findUnique({ where: { id: "ci-pay1" }, select: { permissions: true } });' \
                  'console.log(JSON.stringify(u));' 'await prisma.$disconnect();' > oldread.mts \
-              && DATABASE_URL="$DB" npx tsx oldread.mts) > /tmp/oldread.out 2>&1
+              && DATABASE_URL="$DB" npx tsx oldread.mts) > /tmp/oldread.out 2>&1 || true
             grep -q '"permissions":\[' /tmp/oldread.out && echo "ok   $BASE's Prisma client reads the new permission: $(tail -1 /tmp/oldread.out)" || { echo "FAIL $BASE's client can't read it:"; tail -20 /tmp/oldread.out; fails=$((fails+1)); }
           fi
           docker run -d --name prd6 --network host -e PORT=3992 -e APP_URL=http://localhost:3992 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
