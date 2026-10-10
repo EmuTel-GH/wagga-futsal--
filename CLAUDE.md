@@ -78,6 +78,10 @@ is green and you've tested it, merge (and promote) without waiting.
   ADMIN's real session gets past, apart from sign-in, `/api/auth/*`,
   `/api/health` and static files; every response gets `X-Robots-Tag: noindex`.
   In production it does nothing. Logic + tests: `lib/stagingGate.ts`.
+  **This is the only lock on staging** (it holds a copy of real data, and
+  there's no password prompt in front of it any more). Keep it working in
+  every version. Never remove, bypass or loosen it, or widen its open paths
+  without a very good reason. CI's "Staging gate" step fails if it stops working.
 - Referees' bank details are encrypted in the app (`lib/bankDetails.ts`) and
   only ever sent to the browser masked. Keep it that way.
 - Next.js here differs from older versions: read `node_modules/next/dist/docs/`.

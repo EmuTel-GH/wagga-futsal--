@@ -4,6 +4,7 @@ One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
 ## 2026-10-10
+- Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
 - **Staging site locked to administrators** (PR #11): the test site needs an
   administrator sign-in for every page, and search engines are told not to
   index it. The real site is unchanged.
