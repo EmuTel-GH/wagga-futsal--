@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { generateABA } from "@/lib/aba";
+import { maskBank, openBank } from "@/lib/bankDetails";
 
 // Two referee rate tiers: senior games (U16 & Opens — incl. U19/Social) and
 // junior games (everything else).
@@ -57,15 +58,13 @@ export async function GET(req: Request) {
       refereeId: ref.id,
       name: ref.user?.name ?? [ref.firstName, ref.lastName].filter(Boolean).join(" ") ?? "Unnamed referee",
       email: ref.user?.email ?? null,
-      bsb: ref.bsb,
-      accountNumber: ref.accountNumber,
-      accountName: ref.accountName,
+      // Masked: the full numbers only go into the ABA file (POST).
+      ...maskBank(ref),
       fieldRefGames: fieldSr + fieldJr,
       scorerGames: scorerSr + scorerJr,
       seniorGames: fieldSr + scorerSr,
       juniorGames: fieldJr + scorerJr,
       totalCents,
-      hasBankDetails: !!(ref.bsb && ref.accountNumber && ref.accountName),
     };
   }).filter((r) => r.totalCents > 0);
 
@@ -120,7 +119,8 @@ export async function POST(req: Request) {
       const amountCents =
         fieldSr * rates.fieldSr + fieldJr * rates.fieldJr + scorerSr * rates.scorerSr + scorerJr * rates.scorerJr;
       if (!amountCents || !ref.bsb || !ref.accountNumber || !ref.accountName) return [];
-      return [{ bsb: ref.bsb, accountNumber: ref.accountNumber, accountName: ref.accountName, amountCents, reference: "WAGGA FUTSAL GAME FEE" }];
+      const bank = openBank(ref); // decrypted on the server, only into the file
+      return [{ bsb: bank.bsb!, accountNumber: bank.accountNumber!, accountName: bank.accountName!, amountCents, reference: "WAGGA FUTSAL GAME FEE" }];
     });
 
   if (payees.length === 0) {
