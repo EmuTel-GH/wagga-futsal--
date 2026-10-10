@@ -74,6 +74,10 @@ is green and you've tested it, merge (and promote) without waiting.
 - Times: fixtures are stored in UTC; the club is in Australia/Sydney (DST).
   Do date maths per Sydney calendar day (`lib/breakDates.ts`), and convert
   `datetime-local` inputs in the browser (see `FixtureRow.tsx`).
+- `proxy.ts` gates the **staging** site (APP_ENV=staging): only an active
+  ADMIN's real session gets past, apart from sign-in, `/api/auth/*`,
+  `/api/health` and static files; every response gets `X-Robots-Tag: noindex`.
+  In production it does nothing. Logic + tests: `lib/stagingGate.ts`.
 - Referees' bank details are encrypted in the app (`lib/bankDetails.ts`) and
   only ever sent to the browser masked. Keep it that way.
 - Next.js here differs from older versions: read `node_modules/next/dist/docs/`.

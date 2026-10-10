@@ -4,6 +4,9 @@ One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
 ## 2026-10-10
+- **Staging site locked to administrators** (PR #11): the test site needs an
+  administrator sign-in for every page, and search engines are told not to
+  index it. The real site is unchanged.
 - **Safer releases** (PR #10): changes now go to a staging site first and
   reach the real site automatically when approved, with automatic database
   backups, upgrades and rollback. The site footer shows which version is live.

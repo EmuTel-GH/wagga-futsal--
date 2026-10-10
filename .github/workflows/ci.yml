@@ -74,3 +74,71 @@ jobs:
           curl -sf http://127.0.0.1:3999/api/health | grep -q '"ok":true'
           curl -sf http://127.0.0.1:3999/api/health | grep -q '"version":"ci"'
           docker rm -f app
+
+      # Staging gate (proxy.ts): with APP_ENV=staging only an active ADMIN's
+      # real session gets in; production must behave exactly as before.
+      - name: Staging gate, and production unchanged
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          psql "$DB" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "User"(id, email, "passwordHash", name, role) VALUES
+            ('ci-admin', 'ci-admin@test', 'x', 'CI Admin', 'ADMIN'),
+            ('ci-ref', 'ci-ref@test', 'x', 'CI Ref', 'REFEREE'),
+            ('ci-gone', 'ci-gone@test', 'x', 'CI Gone', 'ADMIN');
+          UPDATE "User" SET active = false WHERE id = 'ci-gone';
+          INSERT INTO "AuthSession"(id, "userId", token, "expiresAt") VALUES
+            ('s1', 'ci-admin', 'admintoken', now() + interval '1 day'),
+            ('s2', 'ci-ref', 'reftoken', now() + interval '1 day'),
+            ('s3', 'ci-admin', 'expiredtoken', now() - interval '1 day'),
+            ('s4', 'ci-gone', 'inactivetoken', now() + interval '1 day');
+          SQL
+          common="--network host -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci"
+          docker run -d --name stg $common -e PORT=3998 -e APP_URL=http://localhost:3998 -e APP_ENV=staging wagga-futsal:ci
+          docker run -d --name prd $common -e PORT=3997 -e APP_URL=http://localhost:3997 wagga-futsal:ci
+          for p in 3998 3997; do for i in $(seq 1 30); do curl -sf http://127.0.0.1:$p/api/health >/dev/null && break; sleep 2; done; done
+
+          fails=0
+          # expect <port> <path> <cookie-token|-> <status> <noindex yes|no> [location-suffix]
+          expect() {
+            local hdrs; hdrs=$(mktemp)
+            local cookie=(); [ "$3" != "-" ] && cookie=(-H "Cookie: session=$3")
+            local code; code=$(curl -s -o /dev/null -D "$hdrs" -w "%{http_code}" "${cookie[@]}" "http://127.0.0.1:$1$2")
+            local robots=no; grep -qi '^x-robots-tag: noindex' "$hdrs" && robots=yes
+            local loc; loc=$(grep -i '^location:' "$hdrs" | tr -d '\r' | awk '{print $2}')
+            if [ "$code" = "$4" ] && [ "$robots" = "$5" ] && { [ -z "${6:-}" ] || [[ "$loc" == *"$6" ]]; }; then
+              echo "ok   $1 $2 [$3] → $code noindex=$robots $loc"
+            else
+              echo "FAIL $1 $2 [$3] → $code noindex=$robots $loc (wanted $4 noindex=$5 ${6:-})"; fails=$((fails+1))
+            fi
+          }
+          # staging: closed without a valid admin session
+          expect 3998 / - 307 yes /referee/login
+          expect 3998 /admin - 307 yes /referee/login
+          expect 3998 /competition - 307 yes /referee/login
+          expect 3998 /api/admin/competitions - 401 yes
+          expect 3998 /api/teams/x/calendar - 401 yes
+          expect 3998 / reftoken 307 yes /referee/login
+          expect 3998 / expiredtoken 307 yes /referee/login
+          expect 3998 / inactivetoken 307 yes /referee/login
+          expect 3998 / not-a-real-token 307 yes /referee/login
+          expect 3998 /api/admin/competitions reftoken 401 yes
+          # staging: open paths
+          expect 3998 /referee/login - 200 yes
+          expect 3998 /api/health - 200 yes
+          expect 3998 /logo.png - 200 yes
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d '{"email":"nobody@test","password":"x"}' http://127.0.0.1:3998/api/auth/login)
+          [ "$code" = "401" ] && echo "ok   3998 POST /api/auth/login reachable (bad login → 401)" || { echo "FAIL login route → $code"; fails=$((fails+1)); }
+          # staging: an active admin gets everything
+          expect 3998 / admintoken 200 yes
+          expect 3998 /competition admintoken 200 yes
+          expect 3998 /api/admin/competitions admintoken 200 yes
+          # production: exactly as before, no gate, no noindex
+          expect 3997 / - 200 no
+          expect 3997 /competition - 200 no
+          expect 3997 /referee/login - 200 no
+          expect 3997 /api/health - 200 no
+          expect 3997 /api/admin/competitions - 401 no
+          expect 3997 /api/admin/competitions admintoken 200 no
+          expect 3997 /api/teams/x/calendar - 404 no
+          docker rm -f stg prd >/dev/null
+          [ "$fails" = 0 ] || { echo "$fails gate check(s) failed"; exit 1; }
