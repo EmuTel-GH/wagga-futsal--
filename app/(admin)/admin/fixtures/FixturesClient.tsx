@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import FixtureRow from "./FixtureRow";
 import { groupRounds } from "@/lib/rounds";
+import DrawRequestsPanel from "@/components/admin/DrawRequestsPanel";
 import GenerateDrawForm, { describeDraw, type DrawCompetition, type DrawResult } from "@/components/admin/GenerateDrawForm";
 import { breakFor, type BreakRange } from "@/lib/breakDates";
 
@@ -161,6 +162,16 @@ export default function FixturesClient({
         <div className="bg-white border border-border rounded-xl p-4 mb-4">
           <p className="text-xs font-bold text-navy uppercase tracking-wide mb-2">Generate draw</p>
           <GenerateDrawForm competition={selectedComp} onGenerated={handleGenerated} />
+          <div className="mt-4 pt-4 border-t border-border">
+            <DrawRequestsPanel
+              competitionId={selectedComp.id}
+              teams={teams}
+              onApplied={(m) => {
+                try { sessionStorage.setItem("fixturesNotice", m); } catch {}
+                window.location.reload();
+              }}
+            />
+          </div>
         </div>
       )}
 

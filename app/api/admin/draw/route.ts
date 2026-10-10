@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { generateRoundRobin, scheduleFixtures } from "@/lib/draw";
 import { breaksForCompetition, sydneyDateKey } from "@/lib/breaks";
+import { applyDrawRequests, describeRequest } from "@/lib/drawRequestsDb";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_ROUNDS = 200; // a safety cap for "keep going until the end date"
@@ -106,6 +107,10 @@ export async function POST(req: Request) {
       status: "DRAFT",
     })),
   });
+  // Saved draw requests ("A v B on…", "A's bye on…"): re-order the new rounds to meet them.
+  const applied = await applyDrawRequests(competitionId, { dryRun: false });
+  const requestResults = applied.results.map((r) => ({ ...r, label: describeRequest(applied.requests.find((q) => q.id === r.id)!) }));
+
   // Remember the settings for next time (and show the end date publicly).
   await prisma.competition.update({
     where: { id: competitionId },
@@ -129,7 +134,7 @@ export async function POST(req: Request) {
       (skipped.length ? `, skipping ${skipped.length} week${skipped.length === 1 ? "" : "s"} for breaks` : ""),
     entityType: "Competition",
     entityId: competitionId,
-    details: { startDate, timesEach, maxRounds, endDate, teams: teams.length, fixtures: fixtures.length, rounds: roundsPlaced, lastGame, fullCycles, extraRounds, stoppedAtEndDate, skippedWeeks },
+    details: { startDate, timesEach, maxRounds, endDate, teams: teams.length, fixtures: fixtures.length, rounds: roundsPlaced, lastGame, fullCycles, extraRounds, stoppedAtEndDate, skippedWeeks, requests: requestResults },
   });
 
   return NextResponse.json({
@@ -142,5 +147,6 @@ export async function POST(req: Request) {
     stoppedAtEndDate,
     shortOfTarget,
     skippedWeeks,
+    requests: requestResults,
   });
 }
