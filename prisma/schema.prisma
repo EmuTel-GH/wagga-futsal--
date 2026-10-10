@@ -265,6 +265,7 @@ model Competition {
   suspensions   Suspension[]
   dispensations Dispensation[]
   breaks        FixtureBreak[]
+  drawRequests  DrawRequest[]
 }
 
 // A period with no games: public holiday, school holidays, Christmas break.
@@ -313,14 +314,16 @@ model Team {
   status       TeamStatus @default(APPROVED)
   createdAt    DateTime   @default(now())
 
-  players             TeamPlayer[]
-  legacyOfficials     TeamOfficial[]
-  officialAssignments TeamOfficialAssignment[]
-  expected            ExpectedPlayer[]
-  competitions        CompetitionTeam[]
-  homeFixtures        Fixture[]                @relation("HomeTeam")
-  awayFixtures        Fixture[]                @relation("AwayTeam")
-  events              MatchEvent[]
+  players              TeamPlayer[]
+  legacyOfficials      TeamOfficial[]
+  officialAssignments  TeamOfficialAssignment[]
+  expected             ExpectedPlayer[]
+  competitions         CompetitionTeam[]
+  homeFixtures         Fixture[]                @relation("HomeTeam")
+  awayFixtures         Fixture[]                @relation("AwayTeam")
+  events               MatchEvent[]
+  drawRequests         DrawRequest[]            @relation("DrawRequestTeam")
+  drawRequestsOpponent DrawRequest[]            @relation("DrawRequestOpponent")
 }
 
 enum TeamStatus {
@@ -571,4 +574,31 @@ model RulesDocument {
   version     String
   publishedAt DateTime @default(now())
   active      Boolean  @default(true)
+}
+
+// A fixed point the draw must respect, kept per competition so it survives
+// regenerating: "A v B on <date>" (MATCH_DATE) or "A has the bye on <date>"
+// (TEAM_BYE, odd-sized competitions). Met by re-ordering whole unplayed
+// rounds; see lib/drawRequests.ts.
+model DrawRequest {
+  id            String          @id @default(cuid())
+  competitionId String
+  kind          DrawRequestKind
+  // Any day in the target week (Sydney); the round played that week is used.
+  date          DateTime        @db.Date
+  teamId        String
+  opponentId    String?
+  note          String?
+  createdAt     DateTime        @default(now())
+
+  competition Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  team        Team        @relation("DrawRequestTeam", fields: [teamId], references: [id], onDelete: Cascade)
+  opponent    Team?       @relation("DrawRequestOpponent", fields: [opponentId], references: [id], onDelete: Cascade)
+
+  @@index([competitionId])
+}
+
+enum DrawRequestKind {
+  MATCH_DATE
+  TEAM_BYE
 }

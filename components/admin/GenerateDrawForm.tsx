@@ -21,6 +21,7 @@ export type DrawResult = {
   stoppedAtEndDate: boolean;
   shortOfTarget: boolean;
   skippedWeeks: { weekOf: string; breakName: string }[];
+  requests?: { ok: boolean; label: string; reason?: string }[];
 };
 
 const TIMES = ["once", "twice", "three times", "four times"];
@@ -41,6 +42,10 @@ export function describeDraw(d: DrawResult) {
     (d.shortOfTarget ? " ⚠ The end date arrived before the round-robins you asked for were finished." : "") +
     (d.skippedWeeks.length
       ? ` Skipped ${d.skippedWeeks.length} week${d.skippedWeeks.length === 1 ? "" : "s"} for breaks: ${d.skippedWeeks.map((s) => `${fmtDay(s.weekOf)} (${s.breakName})`).join(", ")}.`
+      : "") +
+    (d.requests?.length
+      ? ` Draw requests: ${d.requests.filter((r) => r.ok).length} of ${d.requests.length} met` +
+        (d.requests.some((r) => !r.ok) ? ` (not met: ${d.requests.filter((r) => !r.ok).map((r) => `${r.label}: ${r.reason}`).join("; ")})` : "") + "."
       : "") +
     " It isn't on the website until you publish it."
   );
