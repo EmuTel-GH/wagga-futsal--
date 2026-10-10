@@ -4,10 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { cleanPermissions, MIN_ADMIN_SET_PASSWORD } from "@/lib/users";
+import { createSetupLink } from "@/lib/setupLinks";
+import { setupUrl } from "@/lib/setupTokens";
+import { siteUrl } from "@/lib/siteUrl";
 
 // Create a user. Either give them a temporary password (which they should
-// change under My account), or leave it blank so they create one on first
-// sign-in — like imported referees.
+// change under My account), or leave it blank to get a one-time set-up link
+// (7 days) to send them.
 export async function POST(req: Request) {
   let session;
   try {
@@ -40,7 +43,7 @@ export async function POST(req: Request) {
       email,
       role,
       permissions,
-      // Without a password the account must set one on first sign-in.
+      // Without a password the account waits for a set-up link.
       passwordHash: await hashPassword(password || crypto.randomUUID()),
       mustSetPassword: !password,
       // Referees need a referee profile to be assigned games and paid.
@@ -54,8 +57,12 @@ export async function POST(req: Request) {
     summary: `Created ${role === "ADMIN" ? "administrator" : "referee"} ${name} (${email})${permissions.length ? ` with ${permissions.join(", ")}` : ""}`,
     entityType: "User",
     entityId: user.id,
-    details: { name, email, role, permissions, passwordSetBy: password ? "admin" : "user on first sign-in" },
+    details: { name, email, role, permissions, passwordSetBy: password ? "admin" : "user, via a set-up link" },
   });
 
+  if (!password) {
+    const { token, expiresAt } = await createSetupLink(user.id, session.user.id);
+    return NextResponse.json({ ...user, setupUrl: setupUrl(siteUrl(req), token), setupExpiresAt: expiresAt }, { status: 201 });
+  }
   return NextResponse.json(user, { status: 201 });
 }

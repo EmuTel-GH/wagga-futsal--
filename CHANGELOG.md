@@ -3,6 +3,12 @@
 One entry per merged PR, newest first. Plain English, written so it can be
 passed on to the club. Versions are the short git commit shown in the site footer.
 
+## 2026-10-11
+- **Safer account set-up**: new accounts and password resets now use a
+  one-time set-up link that an administrator creates on the Users page and
+  sends to the person (valid 7 days, works once). Referees still waiting to
+  set a password need a link from an administrator.
+
 ## 2026-10-10
 - Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
 - **Staging site locked to administrators** (PR #11): the test site needs an

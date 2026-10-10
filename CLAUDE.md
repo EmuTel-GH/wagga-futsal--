@@ -94,6 +94,8 @@ is green and you've tested it, merge (and promote) without waiting.
 - Weaken an auth or permission check to make something work.
 
 ## Useful places
+- `lib/setupLinks.ts`: one-time password set-up links (hashed, single use, 7 days).
+  Never reintroduce username-only first sign-in.
 - `lib/draw.ts` (round-robin + scheduling around breaks), `lib/drawRequests.ts`
   (fix a match/bye to a week), `lib/split.ts`, `lib/finals.ts`,
   `lib/eligibility.ts` (age rules), `lib/audit.ts` (audit log: call it from

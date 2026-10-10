@@ -1,36 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { hashPassword, signIn } from "@/lib/auth";
+import { signIn } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { consumeSetupLink } from "@/lib/setupLinks";
 
-// First-sign-in password setup: only valid while the account is flagged
-// mustSetPassword (i.e. it has never had a password). Sets it and signs in.
+// Set a password with a one-time set-up link from an administrator
+// ({ token, password }), then sign in. The link works once, for 7 days.
 export async function POST(req: Request) {
-  const { email, password } = await req.json();
-
-  if (!email || !password) {
-    return NextResponse.json({ error: "Username and password required" }, { status: 400 });
-  }
-  if (String(password).length < 8) {
-    return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+  const { token, password } = await req.json();
+  if (!password || String(password).length < 10) {
+    return NextResponse.json({ error: "Password must be at least 10 characters" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase().trim() } });
-  if (!user || !user.mustSetPassword) {
-    return NextResponse.json({ error: "This account already has a password — sign in normally." }, { status: 400 });
-  }
-  if (!user.active) {
-    return NextResponse.json({ error: "This account has been deactivated — contact admin@waggafutsal.com.au" }, { status: 403 });
+  const result = await consumeSetupLink(token, String(password));
+  if (!result.ok) {
+    await audit(null, { action: "auth.setup_link_rejected", summary: "A password set-up link was rejected (invalid, expired or used)" });
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
-  const passwordHash = await hashPassword(password);
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash, mustSetPassword: false },
-  });
-
-  await signIn(user.id);
-  await audit(user, { action: "auth.set_password", summary: `${user.name} set their password on first sign-in`, entityType: "User", entityId: user.id });
-
-  return NextResponse.json({ role: user.role, name: user.name });
+  await signIn(result.user.id);
+  await audit(result.user, { action: "auth.set_password", summary: `${result.user.name} set their password with a set-up link`, entityType: "User", entityId: result.user.id });
+  return NextResponse.json({ role: result.user.role, name: result.user.name });
 }

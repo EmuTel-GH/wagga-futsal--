@@ -25,9 +25,28 @@ model User {
   lastLoginAt     DateTime?
   createdAt       DateTime     @default(now())
 
-  referee   Referee?
-  sessions  AuthSession[]
-  auditLogs AuditLog[]
+  referee     Referee?
+  sessions    AuthSession[]
+  auditLogs   AuditLog[]
+  setupTokens PasswordSetupToken[]
+}
+
+// One-time link for setting a password (new accounts, resets): created by an
+// admin and handed over directly. Only the SHA-256 of the token is stored; a
+// link works once, expires after 7 days, and making a new one for the same
+// user invalidates the old. See lib/setupLinks.ts.
+model PasswordSetupToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model AuthSession {
