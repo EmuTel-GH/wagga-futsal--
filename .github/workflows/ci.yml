@@ -218,6 +218,46 @@ jobs:
           done
           curl -s "$B/api/fixtures/fL" | grep -q '"name":"Leak Home"' && echo "ok   API still has what the live page needs" || { echo "FAIL API lost team names"; fails=$((fails+1)); }
           docker rm -f prd4 >/dev/null
+      # Hardening batch: nominations, referee logins, session tokens, referee data in fixture views.
+      - name: Nominations, referee logins, sessions
+        run: |
+          DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
+          psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+          INSERT INTO "Competition"(id, name, season, "ageGroup", status) VALUES ('cN', 'Nom Comp', '2026', 'U12', 'REGISTRATION') ON CONFLICT DO NOTHING;
+          INSERT INTO "Team"(id, name, status) VALUES ('tPend', 'Pending Spam FC', 'PENDING'), ('tOk', 'Approved FC', 'APPROVED');
+          INSERT INTO "User"(id, email, "passwordHash", name, role) VALUES ('ci-hist', 'ci-hist@test', 'x', 'Ref With Games', 'REFEREE');
+          INSERT INTO "Referee"(id, "userId", bsb, "accountNumber", phone) VALUES ('rH', 'ci-hist', 'enc:v1:x:y:z', 'enc:v1:x:y:z', '0400 111 222');
+          INSERT INTO "Fixture"(id, "competitionId", "homeTeamId", "awayTeamId", "scheduledAt", round, status, "fieldRefereeId", "updatedAt")
+            VALUES ('fH', 'cN', 'tOk', 'tPend', now(), 1, 'COMPLETED', 'rH', now());
+          SQL
+          docker run -d --name prd5 --network host -e PORT=3993 -e APP_URL=http://localhost:3993 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3993/api/health >/dev/null && break; sleep 2; done
+          B=http://127.0.0.1:3993; J="Content-Type: application/json"; fails=0
+          code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+          is() { if [ "$2" = "$1" ]; then echo "ok   $3 → $2"; else echo "FAIL $3 → $2 (wanted $1)"; fails=$((fails+1)); fi; }
+          # nominations
+          is 400 "$(code -H "$J" -d '{"teamName":"X","competitionId":"cN","contactName":"Y","contactEmail":"not-an-email"}' $B/api/public/team-nomination)" "nomination with a bad email refused"
+          is 400 "$(code -H "$J" -d '{"teamName":"X","competitionId":"cN","contactName":"Y","contactEmail":"a@b.com","kitShirt":{"x":1}}' $B/api/public/team-nomination)" "nomination with a non-text field refused"
+          is 404 "$(code $B/teams/tPend)" "pending team page is not public"
+          is 200 "$(code $B/teams/tOk)"   "approved team page is public"
+          # referee logins need MANAGE_USERS; no password hash in the response
+          psql "$DB" -qc "UPDATE \"User\" SET permissions='{}' WHERE id='ci-admin'"
+          is 401 "$(code -H "$J" -H 'Cookie: session=admintoken' -d '{"name":"R","email":"r.one","password":"long-enough-pw"}' $B/api/admin/referees)" "admin without Manage users can't create logins"
+          psql "$DB" -qc "UPDATE \"User\" SET permissions='{MANAGE_USERS}' WHERE id='ci-admin'"
+          is 400 "$(code -H "$J" -H 'Cookie: session=admintoken' -d '{"name":"R","email":"r.one","password":"short"}' $B/api/admin/referees)" "short referee password refused"
+          r=$(curl -s -H "$J" -H 'Cookie: session=admintoken' -d '{"name":"R One","email":"R.One","password":"long-enough-pw"}' $B/api/admin/referees)
+          echo "$r" | grep -q '"email":"r.one"' && ! echo "$r" | grep -q passwordHash && echo "ok   referee created (email lowercased, no password hash returned)" || { echo "FAIL create response: $r"; fails=$((fails+1)); }
+          r=$(curl -s -X DELETE -H 'Cookie: session=admintoken' $B/api/admin/referees/rH)
+          echo "$r" | grep -q '"deactivated":true' && echo "ok   referee with games is deactivated, not deleted" || { echo "FAIL delete with history: $r"; fails=$((fails+1)); }
+          [ "$(psql "$DB" -tAc "SELECT count(*) FROM \"Referee\" WHERE id='rH'")" = 1 ] || { echo "FAIL referee with history was deleted"; fails=$((fails+1)); }
+          # fixture admin views: names only (no bank fields, no phone)
+          body=$(curl -s -H 'Cookie: session=admintoken' $B/api/admin/fixtures)
+          echo "$body" | grep -qE '"bsb"|"accountNumber"|"accountName"|"phone"|enc:v1' && { echo "FAIL fixture list exposes referee details"; fails=$((fails+1)); } || echo "ok   fixture list has referee names only"
+          # session tokens: a real sign-in issues a 256-bit random token
+          r=$(curl -s -c /tmp/c5 -H "$J" -d '{"email":"r.one","password":"long-enough-pw"}' $B/api/auth/login)
+          t=$(awk '$6=="session"{print $7}' /tmp/c5)
+          [[ "$t" =~ ^[A-Za-z0-9_-]{43}$ ]] && echo "ok   session token is 256-bit random" || { echo "FAIL session token looks like: ${t:0:8}… ($r)"; fails=$((fails+1)); }
+          docker rm -f prd5 >/dev/null
           [ "$fails" = 0 ] || exit 1
       # One-time password set-up links (replacing username-only first sign-in).
       - name: Account set-up links

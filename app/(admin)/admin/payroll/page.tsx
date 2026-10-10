@@ -1,9 +1,11 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PayrollClient from "./PayrollClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function PayrollPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const rate = await prisma.payRate.findFirst();
 
   return (

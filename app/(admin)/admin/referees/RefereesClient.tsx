@@ -102,8 +102,11 @@ export default function RefereesClient({ initialReferees }: { initialReferees: R
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Remove referee "${name}"? This will delete their login account.`)) return;
-    await fetch(`/api/admin/referees/${id}`, { method: "DELETE" });
+    if (!confirm(`Remove referee "${name}"? Referees with games are kept and their login deactivated instead.`)) return;
+    const res = await fetch(`/api/admin/referees/${id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error ?? "Couldn't remove the referee");
+    if (data.deactivated) return alert(`${name} has game history, so they've been kept and their login deactivated.`);
     setReferees((prev) => prev.filter((r) => r.id !== id));
   };
 

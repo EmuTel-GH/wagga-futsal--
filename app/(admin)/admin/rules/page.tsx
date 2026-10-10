@@ -1,9 +1,11 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import RulesClient from "./RulesClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function RulesPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const doc = await prisma.rulesDocument.findFirst({
     where: { active: true },
     orderBy: { publishedAt: "desc" },

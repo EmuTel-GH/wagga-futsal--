@@ -1,9 +1,11 @@
+import { adminPage } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import SessionsClient from "./SessionsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function SessionsPage() {
+  await adminPage(); // own check: layouts don't re-run on every navigation
   const [sessions, pitches] = await Promise.all([
     prisma.futsalSession.findMany({
       include: {
