@@ -25,7 +25,7 @@ passed on to the club. Versions are the short git commit shown in the site foote
   set a password need a link from an administrator.
 - **Payroll permission**: pay rates, the ABA pay file and referees' bank
   details now need a new "Manage payroll" permission. Administrators who
-  already manage users have it; give it to others from the Users page.
+  manage users get it in the next update (or tick it on the Users page).
   Pay rates must be whole-cent amounts between $0 and $1,000. Every bank
   detail change is recorded in the audit log.
 - **Tighter admin checks**: every admin page checks sign-in itself; referee

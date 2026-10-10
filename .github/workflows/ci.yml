@@ -308,33 +308,30 @@ jobs:
           echo "ok   reset returns a link; only user managers can make links"
           docker rm -f prd2 >/dev/null
 
-      - name: Payroll permission (and the previous release can still read it)
+      - name: Payroll permission (and the previous release still reads every user)
         env:
           BASE: ${{ github.base_ref }}
         run: |
           DB=postgresql://postgres:ci@127.0.0.1:5432/prodshape
           fails=0
-          # The grant migration: Manage-users admins get payroll; re-running adds no duplicates.
           psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
           INSERT INTO "User"(id, email, "passwordHash", name, role, permissions) VALUES
-            ('ci-pay1', 'ci-pay1@test', 'x', 'Users Admin', 'ADMIN', '{MANAGE_USERS}'),
-            ('ci-pay2', 'ci-pay2@test', 'x', 'Plain Admin', 'ADMIN', '{VIEW_AUDIT}');
+            ('ci-pay1', 'ci-pay1@test', 'x', 'Users Admin', 'ADMIN', '{MANAGE_USERS}');
           SQL
-          psql "$DB" -v ON_ERROR_STOP=1 -q -f prisma/manual-migrations/20261011c_grant_payroll.sql
-          psql "$DB" -v ON_ERROR_STOP=1 -q -f prisma/manual-migrations/20261011c_grant_payroll.sql
-          got=$(psql "$DB" -tAc "SELECT id || '=' || array_to_string(permissions, ',') FROM \"User\" WHERE id IN ('ci-pay1','ci-pay2') ORDER BY id" | tr '\n' ' ')
-          [ "$got" = "ci-pay1=MANAGE_USERS,MANAGE_PAYROLL ci-pay2=VIEW_AUDIT " ] && echo "ok   grant: $got" || { echo "FAIL grant: $got"; fails=$((fails+1)); }
+          # This release's migrations add MANAGE_PAYROLL but give it to nobody yet.
+          n=$(psql "$DB" -tAc "SELECT count(*) FROM \"User\" WHERE 'MANAGE_PAYROLL' = ANY(permissions)")
+          [ "$n" = 0 ] && echo "ok   nobody holds MANAGE_PAYROLL after migrating" || { echo "FAIL $n user(s) hold MANAGE_PAYROLL after migrating"; fails=$((fails+1)); }
           # Automatic rollback runs the previous release against this schema: its
-          # Prisma client must still load users who hold the new permission.
+          # Prisma client must still load every user (it throws on enum values it doesn't know).
+          # (Own worktree and install: the migration step's /tmp/base shares this branch's client.)
           if [ -n "$BASE" ]; then
-          # (Its own worktree and install: the migration step's /tmp/base shares this branch's client.)
             git fetch -q --depth=1 origin "$BASE" && git worktree add -q /tmp/prev FETCH_HEAD
             (cd /tmp/prev && npm ci --no-audit --no-fund --loglevel=error >/dev/null && npx prisma generate >/dev/null \
               && printf '%s\n' 'import { prisma } from "./lib/prisma";' \
-                 'const u = await prisma.user.findUnique({ where: { id: "ci-pay1" }, select: { permissions: true } });' \
+                 'const u = await prisma.user.findMany({ select: { id: true, permissions: true } });' \
                  'console.log(JSON.stringify(u));' 'await prisma.$disconnect();' > oldread.mts \
               && DATABASE_URL="$DB" npx tsx oldread.mts) > /tmp/oldread.out 2>&1 || true
-            grep -q '"permissions":\[' /tmp/oldread.out && echo "ok   $BASE's Prisma client reads the new permission: $(tail -1 /tmp/oldread.out)" || { echo "FAIL $BASE's client can't read it:"; tail -20 /tmp/oldread.out; fails=$((fails+1)); }
+            grep -q '"permissions":\[' /tmp/oldread.out && echo "ok   $BASE's Prisma client still reads every user after these migrations" || { echo "FAIL $BASE's client can't read it:"; tail -20 /tmp/oldread.out; fails=$((fails+1)); }
           fi
           docker run -d --name prd6 --network host -e PORT=3992 -e APP_URL=http://localhost:3992 -e DATABASE_URL=$DB -e STRIPE_SECRET_KEY=sk_test_ci wagga-futsal:ci
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:3992/api/health >/dev/null && break; sleep 2; done
