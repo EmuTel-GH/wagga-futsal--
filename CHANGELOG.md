@@ -11,6 +11,8 @@ passed on to the club. Versions are the short git commit shown in the site foote
   scoring console now load only what they show (team names, scores, events,
   players' names and shirt numbers), not team contact details or players'
   dates of birth.
+- **Security updates**: the web framework and its image tools updated to the
+  latest secure versions; two unused components removed.
 
 ## 2026-10-10
 - Developer notes: the staging gate is the only lock on the test site, so it must stay in every version (PR #13).
